@@ -1,0 +1,32 @@
+name: Validate
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Run shellcheck on scripts
+      run: |
+        shellcheck scripts/skill-deploy || true
+        shellcheck scripts/create-family || true
+
+    - name: Validate SKILL.md structure
+      run: |
+        if [ ! -f SKILL.md ]; then
+          echo "SKILL.md is missing"
+          exit 1
+        fi
+        echo "SKILL.md found"
+
+    - name: Check scripts are executable
+      run: |
+        test -x scripts/skill-deploy || { echo "skill-deploy not executable"; exit 1; }
+        test -x scripts/create-family || { echo "create-family not executable"; exit 1; }
+        echo "Scripts are executable"
