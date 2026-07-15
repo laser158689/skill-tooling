@@ -1,0 +1,125 @@
+#!/bin/bash
+set -euo pipefail
+
+# skill-deploy
+# Deploy a skill family from its GitHub master repo into Grok
+
+REPO=""
+FAMILY=""
+PUSH=false
+
+while [[ $# -gt 0 ]]; do
+  case $1 in
+    --repo)
+      REPO="$2"
+      shift 2
+      ;;
+    --family)
+      FAMILY="$2"
+      shift 2
+      ;;
+    --push)
+      PUSH=true
+      shift
+      ;;
+    *)
+      echo "Usage: skill-deploy --repo owner/repo [--family name] [--push]"
+      exit 1
+      ;;
+  esac
+done
+
+if [[ -z "$REPO" ]]; then
+  echo "Error: --repo is required"
+  exit 1
+fi
+
+# Derive family name from repo if not provided
+if [[ -z "$FAMILY" ]]; then
+  FAMILY=$(basename "$REPO" | tr '[:upper:]' '[:lower:]' | tr '_' '-')
+fi
+
+echo "=== Skill Deploy ==="
+echo "Repo:   $REPO"
+echo "Family: $FAMILY"
+echo ""
+
+TEMP_DIR=$(mktemp -d)
+echo "Cloning $REPO..."
+git clone --depth 1 "https://github.com/${REPO}.git" "$TEMP_DIR" > /dev/null 2>&1 || {
+  echo "Failed to clone repo"
+  exit 1
+}
+
+echo "Validating skills..."
+VALID_COUNT=0
+WARNINGS=0
+
+for mdfile in "$TEMP_DIR"/*.md; do
+  [[ "$(basename "$mdfile")" == "README.md" ]] && continue
+
+  skill_name=$(basename "$mdfile" .md)
+  skill_dir="$TEMP_DIR/validate_$skill_name"
+  mkdir -p "$skill_dir"
+  cp "$mdfile" "$skill_dir/SKILL.md"
+
+  if /root/.grok/skills/skill-creator/scripts/validate-skill.sh "$skill_dir" > /dev/null 2>&1; then
+    echo "  ✓ $skill_name (shape valid)"
+  else
+    echo "  ✗ $skill_name (shape validation FAILED)"
+    rm -rf "$TEMP_DIR"
+    exit 1
+  fi
+
+  if [[ ! -d "$TEMP_DIR/tests" && ! -f "$TEMP_DIR/${skill_name}.test.sh" ]]; then
+    echo "    ⚠ No tests found for $skill_name (warning only)"
+    WARNINGS=$((WARNINGS + 1))
+  fi
+
+  VALID_COUNT=$((VALID_COUNT + 1))
+  rm -rf "$skill_dir"
+done
+
+echo ""
+echo "Validation passed for $VALID_COUNT skills."
+
+if [[ $WARNINGS -gt 0 ]]; then
+  echo "⚠ $WARNINGS warning(s): Some skills are missing tests (deployment allowed)."
+fi
+
+echo ""
+echo "Deploying to Grok..."
+for mdfile in "$TEMP_DIR"/*.md; do
+  [[ "$(basename "$mdfile")" == "README.md" ]] && continue
+
+  skill_name=$(basename "$mdfile" .md)
+  dest_dir="/home/workdir/.grok/skills/$skill_name"
+
+  mkdir -p "$dest_dir"
+  cp "$mdfile" "$dest_dir/SKILL.md"
+  echo "  → $skill_name"
+done
+
+CODEX_FILE="/home/workdir/artifacts/${FAMILY}-codex-instructions.md"
+mkdir -p "$(dirname "$CODEX_FILE")"
+echo "# $FAMILY - Codex / ChatGPT Instructions" > "$CODEX_FILE"
+echo "" >> "$CODEX_FILE"
+
+for mdfile in "$TEMP_DIR"/*.md; do
+  [[ "$(basename "$mdfile")" == "README.md" ]] && continue
+  echo "## $(basename "$mdfile" .md)" >> "$CODEX_FILE"
+  echo "" >> "$CODEX_FILE"
+  awk 'BEGIN { in_body=0 } /^---$/ { if (in_body) exit; in_body=1; next } in_body { print }' "$mdfile" >> "$CODEX_FILE"
+  echo "" >> "$CODEX_FILE"
+done
+
+echo ""
+echo "Codex instructions saved to: $CODEX_FILE"
+
+rm -rf "$TEMP_DIR"
+
+echo ""
+echo "=== Deployment to Grok complete ==="
+
+echo ""
+echo "Done."
