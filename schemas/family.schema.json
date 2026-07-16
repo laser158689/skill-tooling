@@ -39,7 +39,8 @@
           "grok-build",
           "claude",
           "claude-code",
-          "openai-chatgpt",
+          "openai-skills-api",
+          "chatgpt-work",
           "codex"
         ]
       },

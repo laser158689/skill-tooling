@@ -5,7 +5,7 @@
 It does two primary things:
 
 - Scaffolds a new family repository.
-- Generates and publishes tool-specific views for Grok, Grok Build, Claude, Claude Code, OpenAI/ChatGPT, Codex, and future targets.
+- Generates and publishes tool-specific views for Grok, Grok Build, Claude, Claude Code, the OpenAI Skills API, ChatGPT Work manual handoff bundles, Codex, and future targets.
 
 Validation is part of deployment. You do not need to run a server or keep background infrastructure running.
 
@@ -57,6 +57,10 @@ The important ownership rule is simple:
 
 The manifest filename is always `family.json`.
 This repo does not use repo-specific manifest filenames like `FH-Coaches.yml`.
+
+Target migration note:
+- `openai-chatgpt` has been renamed to `openai-skills-api`.
+- `chatgpt-work` is a separate target for the ChatGPT Work UI flow and is not the same thing as the OpenAI Skills API.
 
 See [docs/family-repo-contract.md](docs/family-repo-contract.md) for the full contract.
 The family manifest schema is documented in [docs/family-schema.md](docs/family-schema.md) and published as [schemas/family.schema.json](schemas/family.schema.json).
@@ -128,8 +132,9 @@ Publishing is adapter-based.
 
 - `copy` publishers copy a generated tool folder into a configured install root.
 - `command` publishers run a target-specific local command with bundle metadata.
-- `openai-skills` creates or updates hosted OpenAI skills, one per `source/*.md` skill.
+- `openai-skills` creates or updates hosted OpenAI API skills, one per `source/*.md` skill.
 - `claude-agent` creates or updates a hosted Claude agent from the generated family bundle.
+- `claude-skills` installs one local Claude skill directory per `source/*.md` skill under Claude's documented skills root.
 - `codex-skills` installs one local Codex skill directory per `source/*.md` skill.
 
 The canonical publish config is [publish-config.json](publish-config.json).
@@ -155,10 +160,11 @@ Optional publisher fields:
 
 Current adapter status:
 
-- `openai-chatgpt` has a built-in hosted publisher via `openai-skills`.
+- `openai-skills-api` has a built-in hosted publisher via `openai-skills`.
+- `chatgpt-work` has a built-in manual-handoff publisher that writes the exact bundle and install guide for the ChatGPT Work UI flow.
 - `codex` has a built-in local publisher via `codex-skills`.
-- `claude` has a built-in hosted publisher via `claude-agent`.
-- `grok`, `grok-build`, and `claude-code` still depend on local wrapper commands or copy-based/manual flows.
+- `claude` and `claude-code` have built-in local publishers via `claude-skills`.
+- `grok` and `grok-build` still depend on local wrapper commands or copy-based/manual flows.
 - Generated target folders remain the manual fallback artifacts for every target.
 
 ## Credentials And Environment
@@ -182,8 +188,9 @@ Security rules:
 Typical variables:
 
 - `OPENAI_API_KEY` for `openai-skills`
-- `ANTHROPIC_API_KEY` for the `ant` CLI when you enable `claude-agent`
-- `CODEX_HOME` for `codex-skills`
+- `ANTHROPIC_API_KEY` only if you explicitly enable `claude-agent`
+- `CLAUDE_CONFIG_DIR` if you want Claude local skills installed somewhere other than `~/.claude`
+- `CODEX_HOME` for isolated or legacy `codex-skills` installs
 - `SKILL_TOOLING_CONFIG` to override the default publish config path
 
 Starter values are shown in [examples/.env.example](examples/.env.example).
@@ -214,8 +221,12 @@ You can also use environment variables for copy-based publishers:
 - `SKILL_TOOLING_GROK_BUILD_INSTALL_ROOT`
 - `SKILL_TOOLING_CLAUDE_INSTALL_ROOT`
 - `SKILL_TOOLING_CLAUDE_CODE_INSTALL_ROOT`
-- `SKILL_TOOLING_OPENAI_CHATGPT_INSTALL_ROOT`
+- `SKILL_TOOLING_OPENAI_SKILLS_API_INSTALL_ROOT`
 - `SKILL_TOOLING_CODEX_INSTALL_ROOT`
+
+For `claude-skills`, an explicit `--install-path claude=...` or `--install-path claude-code=...` wins. Otherwise the publisher installs to Claude's documented skills root at `~/.claude/skills`, or `CLAUDE_CONFIG_DIR/skills` when `CLAUDE_CONFIG_DIR` is set.
+
+For `codex-skills`, an explicit `--install-path codex=...`, `install_root`, `SKILL_TOOLING_CODEX_INSTALL_ROOT`, or `CODEX_HOME` installs to one configured root. Without one of those explicit roots, the publisher installs to the documented user skills location at `$HOME/.agents/skills`; if `$HOME/.codex/skills` already exists, it also updates that legacy/current-session location so older Codex installs can still discover the skill.
 
 ## Targets
 
@@ -225,8 +236,14 @@ Current targets:
 - `grok-build`
 - `claude`
 - `claude-code`
-- `openai-chatgpt`
+- `openai-skills-api`
+- `chatgpt-work`
 - `codex`
+
+Current gaps:
+
+- `grok`
+- `grok-build`
 
 The generated folder shapes are documented in [docs/target-bundles.md](docs/target-bundles.md).
 The publish config schema is published as [schemas/publish-config.schema.json](schemas/publish-config.schema.json).

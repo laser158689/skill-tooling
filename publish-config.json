@@ -17,20 +17,15 @@
       ]
     },
     "claude": {
-      "mode": "claude-agent",
-      "cli_path": "ant",
-      "model": "claude-opus-4-8",
-      "tool": "{type: agent_toolset_20260401}"
+      "mode": "claude-skills"
     },
     "claude-code": {
-      "mode": "command",
-      "command": [
-        "/usr/local/bin/publish-claude-code-skill-family",
-        "{bundle_dir}",
-        "{family_name}"
-      ]
+      "mode": "claude-skills"
     },
-    "openai-chatgpt": {
+    "chatgpt-work": {
+      "mode": "manual"
+    },
+    "openai-skills-api": {
       "mode": "openai-skills",
       "api_key_env": "OPENAI_API_KEY"
     },

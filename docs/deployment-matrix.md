@@ -20,16 +20,17 @@ This table describes the current end-to-end deployment flow for `skill-tooling`,
 | Push release branch after deploy (`--push`) | Real tooling |
 | Open a pull request after deploy (`--open-pr`) | Real tooling |
 | Merge a pull request after deploy (`--merge-pr`) | Real tooling |
-| Publish `openai-chatgpt` via hosted OpenAI Skills API | Real tooling |
-| Publish `codex` via local `$CODEX_HOME/skills` install | Real tooling |
-| Publish `claude` via `ant beta:agents` | Real tooling |
-| Publish `grok`, `grok-build`, `claude-code` via wrapper command mode | Architecture exists, first-party adapters not built |
+| Publish `openai-skills-api` via hosted OpenAI Skills API | Real tooling |
+| Publish `chatgpt-work` as a manual handoff bundle with generated prompts and `INSTALL.md` | Real tooling |
+| Publish `codex` via local filesystem skill install | Real tooling |
+| Publish `claude` and `claude-code` via Claude local skills install (`~/.claude/skills` or `CLAUDE_CONFIG_DIR/skills`) | Real tooling |
+| Publish `grok` and `grok-build` via wrapper command mode | Architecture exists, first-party adapters not built |
 | Publish any target via copy mode to install roots | Real tooling |
 | Verify copy publishes or run target verify commands | Real tooling |
 | Write deployment receipts/state under `.skill-tooling/deployments/` | Real tooling |
 | Roll back copy-based publishes | Real tooling |
 | Roll back command-based publishes | Guarded tooling; requires `--allow-command-rollback` |
-| Roll back API-based publishers (`openai-skills`, `claude-agent`, `codex-skills`) | Not implemented |
+| Roll back API-based and local skill publishers (`openai-skills`, `claude-agent`, `claude-skills`, `codex-skills`) | Not implemented |
 
 ## Environment Keys
 
@@ -37,6 +38,7 @@ Currently supported local env keys:
 
 - `OPENAI_API_KEY`
 - `ANTHROPIC_API_KEY`
+- `CLAUDE_CONFIG_DIR`
 - `CODEX_HOME`
 - `SKILL_TOOLING_CONFIG`
 - `SKILL_TOOLING_ENV_FILE`
@@ -44,7 +46,7 @@ Currently supported local env keys:
 - `SKILL_TOOLING_GROK_BUILD_INSTALL_ROOT`
 - `SKILL_TOOLING_CLAUDE_INSTALL_ROOT`
 - `SKILL_TOOLING_CLAUDE_CODE_INSTALL_ROOT`
-- `SKILL_TOOLING_OPENAI_CHATGPT_INSTALL_ROOT`
+- `SKILL_TOOLING_OPENAI_SKILLS_API_INSTALL_ROOT`
 - `SKILL_TOOLING_CODEX_INSTALL_ROOT`
 
 ## Notes
