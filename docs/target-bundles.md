@@ -9,9 +9,10 @@ customer-support/
   source/
     orchestrator.md
     researcher.md
-  grok/
-  claude/
-  codex/
+  dist/
+    grok/
+    claude/
+    codex/
 ```
 
 ## Folder Shape
@@ -19,7 +20,7 @@ customer-support/
 Each target folder contains:
 
 ```text
-<target>/
+dist/<target>/
   README.md
   manifest.json
   family.<ext>
@@ -29,11 +30,11 @@ Each target folder contains:
 
 Examples:
 
-- `grok/family.grok`
-- `grok/orchestrator.grok`
-- `claude/family.skill`
-- `claude/researcher.skill`
-- `codex/orchestrator.prompt`
+- `dist/grok/family.grok`
+- `dist/grok/orchestrator.grok`
+- `dist/claude/family.skill`
+- `dist/claude/researcher.skill`
+- `dist/codex/orchestrator.prompt`
 
 ## Purpose
 

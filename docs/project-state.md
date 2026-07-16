@@ -62,30 +62,27 @@ my-family/
   source/
     orchestrator.md
     researcher.md
-  overrides/
-    orchestrator/
-      claude.md
-  grok/
-  grok-build/
-  claude/
-  claude-code/
-  openai-skills-api/
-  chatgpt-work/
-  codex/
+  dist/
+    grok/
+    grok-build/
+    claude/
+    claude-code/
+    openai-skills-api/
+    chatgpt-work/
+    codex/
 ```
 
 Ownership model:
 
 - Humans author `source/*.md`
-- Humans optionally author `overrides/<skill-id>/<target>.md`
-- `skill-tooling` generates the top-level target folders
+- `skill-tooling` generates `dist/<target>/`
 
 ### Commands
 
 Current commands:
 
 - `scripts/create-family`
-  - Scaffolds a family repo with `family.json` using a `skill_family` manifest object, plus `source/`, `overrides/`, `README.md`, and `.gitignore`
+  - Scaffolds a family repo with `family.json` using a `skill_family` manifest object, plus `source/`, `README.md`, and `.gitignore`
 - `scripts/skill-deploy`
   - Generates target folders
   - Performs validation as part of deployment
@@ -103,8 +100,7 @@ The current implementation does successfully provide:
 - Family scaffolding
 - Shared manifest validation via [family.schema.json](/Users/brianraney/Documents/GitHub/skill-tooling/schemas/family.schema.json)
 - Source skill loading from `source/*.md`
-- Optional target-specific skill overrides from `overrides/<skill-id>/<target>.md`
-- Target folder generation for:
+- Target folder generation under `dist/` for:
   - `grok`
   - `grok-build`
   - `claude`
@@ -120,6 +116,8 @@ The current implementation does successfully provide:
 - Built-in local Codex skill publishing for `codex`
 - Built-in local Claude skill publishing for `claude` and `claude-code`
 - Deployment receipts and rollback support for copy-based publishers
+- Rollback support for built-in local skill publishers (`claude-skills`, `codex-skills`)
+- Formal source skill frontmatter schema validation for `name` and `description`
 - CI smoke coverage for:
   - scaffold
   - validate
@@ -202,10 +200,9 @@ The intended behavior:
 1. Load the family definition.
 2. Validate it against shared schemas.
 3. Load canonical source skills.
-4. Apply any target-specific overrides.
-5. Generate target-native output for each enabled tool.
-6. Publish each target output into the corresponding tool.
-7. Return clear success/failure status per target.
+4. Generate target-native output for each enabled tool.
+5. Publish each target output into the corresponding tool.
+6. Return clear success/failure status per target.
 
 The intent is that this remains a CLI workflow, not a hosted system.
 
@@ -257,7 +254,7 @@ Current state:
 Issue:
 
 - The project now has real integrations, but not yet for every listed tool
-- The current Claude publisher is family-level, not individual-skill level
+- The current Claude local-skills publisher is individual-skill local install, not a hosted remote publisher
 - The current Codex publisher is local-install based, not remote/hosted
 
 Fix:
@@ -266,23 +263,24 @@ Fix:
 - Add individual-skill Anthropic publishing if Anthropic exposes the right surface for this use case
 - Keep `command` mode as the escape hatch for everything else
 
-### 3. Source skill frontmatter still lacks a formal schema
+### 3. Source skill frontmatter is standardized, but intentionally narrow
 
 Current state:
 
 - `family.json` has a schema with a canonical `skill_family` object
 - Publish config now has a formal schema
-- Source skill files still do not have a formal machine-readable schema
+- Source skill frontmatter now has a formal machine-readable schema
+- Supported source frontmatter keys are `name` and `description`
 
 Issue:
 
-- Governance is still partial
-- Validation logic for source skill frontmatter still lives primarily in imperative code
+- The source format is still intentionally narrow
+- It does not support rich YAML structures or per-skill target declarations
 
 Fix:
 
-- Add `schemas/source-skill.schema.json`
-- Validate it at load time
+- Keep the narrow contract and document it explicitly
+- Expand only if a real source-authoring need appears
 
 ### 4. YAML is discussed conceptually but not supported operationally
 
@@ -306,6 +304,7 @@ Current state:
 
 - Source skills use a simple custom frontmatter parser
 - It expects line-oriented `key: value` pairs
+- The allowed keys are `name` and `description`
 
 Issue:
 
@@ -338,7 +337,7 @@ Fix:
 
 Current state:
 
-- `skill-deploy --source .` rewrites top-level target folders inside the family repo
+- `skill-deploy --source .` rewrites `dist/<target>/` inside the family repo
 
 Issue:
 
@@ -350,13 +349,13 @@ Fix:
 - Add optional `--dry-run`
 - Add optional `--clean` / `--no-clean` behavior or diff preview
 
-### 8. Deployment history exists, but API/CLI rollback is still incomplete
+### 8. Deployment history exists, but hosted/API rollback is still incomplete
 
 Current state:
 
 - Deploy now writes receipts and supports rollback for copy-based publishers
-- API/CLI publishers persist state, but they do not yet have rollback handlers
-- `codex-skills` currently overwrites matching installed skill directories and records state, but does not yet provide target-aware rollback
+- Built-in local skill publishers for Claude and Codex now restore prior local installs during rollback
+- Hosted/API publishers still persist state without rollback handlers
 - There is still no full release lifecycle or target-aware version ledger
 
 Issue:
@@ -367,7 +366,7 @@ Fix:
 
 - Keep deployment receipts
 - Add target-aware version tracking
-- Add rollback mechanics for command/API publishers
+- Add rollback mechanics for hosted/API publishers
 - Add release metadata and promotion workflows later
 
 ### 9. Secret handling must stay local-only
@@ -454,7 +453,7 @@ Fix:
 - Package this as a reusable GitHub Action
 - Add schema versioning
 - Add deployment history and release metadata
-- Add richer test fixtures with multiple skills and multiple overrides
+- Add richer test fixtures with multiple skills
 
 ## Current Summary
 

@@ -4,7 +4,7 @@ This table describes the current end-to-end deployment flow for `skill-tooling`,
 
 | Deployment Step | Current State |
 |---|---|
-| Load publish config from `--config`, `SKILL_TOOLING_CONFIG`, or default `publish-config.json` discovery | Real tooling |
+| Load publish config from `--config`, `SKILL_TOOLING_CONFIG`, or default `skill-tooling/publish-config.json` | Real tooling |
 | Load local secrets/config from the default `skill-tooling/.env` or explicit `SKILL_TOOLING_ENV_FILE` override | Real tooling |
 | Restrict `.env` loading to an allowlist of deployment-related keys | Real tooling |
 | Ignore `.env` files in git and fail CI if they are tracked | Real tooling |
@@ -13,8 +13,7 @@ This table describes the current end-to-end deployment flow for `skill-tooling`,
 | Do not implicitly load `.env` from family repos or the current working directory | Real tooling |
 | Validate `family.json` schema | Real tooling |
 | Discover skills from `source/*.md` | Real tooling |
-| Load target overrides from `overrides/<skill-id>/<target>.md` | Real tooling |
-| Generate per-target output folders (`grok/`, `claude/`, `codex/`, etc.) | Real tooling |
+| Generate per-target output folders under `dist/` (`dist/grok/`, `dist/claude/`, `dist/codex/`, etc.) | Real tooling |
 | Stage repo changes after deploy (`--git`) | Real tooling |
 | Commit repo changes after deploy | Real tooling |
 | Push release branch after deploy (`--push`) | Real tooling |
@@ -30,7 +29,8 @@ This table describes the current end-to-end deployment flow for `skill-tooling`,
 | Write deployment receipts/state under `.skill-tooling/deployments/` | Real tooling |
 | Roll back copy-based publishes | Real tooling |
 | Roll back command-based publishes | Guarded tooling; requires `--allow-command-rollback` |
-| Roll back API-based and local skill publishers (`openai-skills`, `claude-agent`, `claude-skills`, `codex-skills`) | Not implemented |
+| Roll back local skill publishers (`claude-skills`, `codex-skills`) | Real tooling |
+| Roll back API-based publishers (`openai-skills`, `claude-agent`) | Not implemented |
 
 ## Environment Keys
 

@@ -29,6 +29,7 @@ TARGET_INSTALL_ENV = {
     "claude": "SKILL_TOOLING_CLAUDE_INSTALL_ROOT",
     "claude-code": "SKILL_TOOLING_CLAUDE_CODE_INSTALL_ROOT",
     "openai-skills-api": "SKILL_TOOLING_OPENAI_SKILLS_API_INSTALL_ROOT",
+    "chatgpt-work": "SKILL_TOOLING_CHATGPT_WORK_INSTALL_ROOT",
     "codex": "SKILL_TOOLING_CODEX_INSTALL_ROOT",
 }
 
@@ -71,6 +72,7 @@ DEFAULT_TARGETS = [
     "claude",
     "claude-code",
     "openai-skills-api",
+    "chatgpt-work",
     "codex",
 ]
 TARGET_DISPLAY_NAMES = {
@@ -138,6 +140,27 @@ FAMILY_MANIFEST_SCHEMA = {
     },
 }
 
+SOURCE_SKILL_FRONTMATTER_SCHEMA = {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "$id": "https://example.com/skill-tooling/source-skill-frontmatter.schema.json",
+    "title": "Skill Tooling Source Skill Frontmatter",
+    "type": "object",
+    "additionalProperties": False,
+    "required": ["description"],
+    "properties": {
+        "name": {
+            "type": "string",
+            "minLength": 1,
+            "description": "Optional human-facing skill name.",
+        },
+        "description": {
+            "type": "string",
+            "minLength": 1,
+            "description": "Required skill description.",
+        },
+    },
+}
+
 PUBLISH_CONFIG_SCHEMA = {
     "$schema": "https://json-schema.org/draft/2020-12/schema",
     "$id": "https://example.com/skill-tooling/publish-config.schema.json",
@@ -200,7 +223,6 @@ class Skill:
     frontmatter: dict[str, str]
     body: str
     targets: list[str]
-    target_overrides: dict[str, str]
 
     @property
     def title(self) -> str:
@@ -456,6 +478,8 @@ def parse_frontmatter(markdown: str, source: Path) -> tuple[dict[str, str], str]
     if body_start is None:
         raise ValidationError(f"{source} frontmatter is missing a closing ---")
 
+    validate_against_schema(frontmatter, SOURCE_SKILL_FRONTMATTER_SCHEMA, f"{source.name} frontmatter")
+
     body = "\n".join(lines[body_start:]).strip() + "\n"
     return frontmatter, body
 
@@ -682,22 +706,38 @@ def remove_codex_skill_directory(destination: Path) -> None:
         shutil.rmtree(destination)
 
 
-def load_skill_overrides(repo_root: Path, skill_id: str, skill_targets: list[str]) -> dict[str, str]:
-    overrides_root = repo_root / "overrides" / skill_id
-    if not overrides_root.exists():
-        return {}
-    if not overrides_root.is_dir():
-        raise ValidationError(f"Override path must be a directory: {overrides_root}")
+def backup_location_for_destination(backup_root: Path, destination: Path) -> Path:
+    relative = str(destination.resolve()).lstrip("/").replace(":", "_")
+    return backup_root / relative
 
-    overrides: dict[str, str] = {}
-    for override_file in sorted(overrides_root.glob("*.md")):
-        target = canonicalize_target(override_file.stem)
-        if target not in skill_targets:
-            raise ValidationError(
-                f"Override {override_file} targets {target}, but {skill_id} is not enabled for that target"
-            )
-        overrides[target] = read_text(override_file).strip() + "\n"
-    return overrides
+
+def backup_existing_destination(backup_root: Path, destination: Path) -> tuple[bool, Path | None]:
+    had_existing_destination = destination.exists()
+    if not had_existing_destination:
+        return False, None
+
+    backup_path = backup_location_for_destination(backup_root, destination)
+    if backup_path.exists():
+        shutil.rmtree(backup_path)
+    backup_path.parent.mkdir(parents=True, exist_ok=True)
+    shutil.move(str(destination), str(backup_path))
+    return True, backup_path
+
+
+def restore_destination_from_backup(
+    destination: Path,
+    had_existing_destination: bool,
+    backup_root: Path,
+) -> None:
+    remove_codex_skill_directory(destination)
+    if not had_existing_destination:
+        return
+
+    backup_path = backup_location_for_destination(backup_root, destination)
+    if not backup_path.exists():
+        raise ValidationError(f"Rollback backup missing for installed skill destination {destination}")
+    destination.parent.mkdir(parents=True, exist_ok=True)
+    shutil.move(str(backup_path), str(destination))
 
 
 def load_skills(family: Family) -> list[Skill]:
@@ -716,8 +756,7 @@ def load_skills(family: Family) -> list[Skill]:
         if not description:
             raise ValidationError(f"{source_file} frontmatter must include description")
 
-        skill_targets = parse_target_list(frontmatter.get("targets"), family.targets)
-        target_overrides = load_skill_overrides(family.path, skill_id, skill_targets)
+        skill_targets = list(family.targets)
 
         skills.append(
             Skill(
@@ -728,7 +767,6 @@ def load_skills(family: Family) -> list[Skill]:
                 frontmatter=frontmatter,
                 body=body,
                 targets=skill_targets,
-                target_overrides=target_overrides,
             )
         )
 
@@ -744,7 +782,7 @@ def load_family_repo(source: Path) -> tuple[Family, list[Skill]]:
 
 
 def get_target_body(skill: Skill, target: str) -> str:
-    return skill.target_overrides.get(target, skill.body)
+    return skill.body
 
 
 def strip_leading_h1(body: str) -> str:
@@ -810,7 +848,6 @@ def render_target_readme(family: Family, skills: list[Skill], target: str) -> st
         "Editing rule:",
         "",
         "- Edit `source/*.md` for canonical skill content.",
-        "- Edit `overrides/<skill-id>/<target>.md` only when this tool needs different wording.",
         "- Re-run `skill-deploy` to regenerate this directory.",
         "",
         "Files in this directory:",
@@ -852,7 +889,8 @@ def render_target_bundle(output_root: Path, family: Family, skills: list[Skill],
     if not target_skills:
         raise ValidationError(f"No skills in family {family.name} are enabled for target {target}")
 
-    bundle_dir = output_root / target
+    bundle_root = output_root / "dist"
+    bundle_dir = bundle_root / target
     if bundle_dir.exists():
         try:
             shutil.rmtree(bundle_dir)
@@ -1007,21 +1045,10 @@ def resolve_publish_config_path(args: argparse.Namespace, source_root: Path | No
             env_candidate = tooling_root / env_candidate
         return env_candidate.resolve()
 
-    search_roots: list[Path] = []
-    if source_root is not None:
-        search_roots.append(source_root)
-    search_roots.append(Path.cwd())
-    search_roots.append(tooling_root)
-
-    seen: set[Path] = set()
-    for root in search_roots:
-        if root in seen:
-            continue
-        seen.add(root)
-        for filename in DEFAULT_PUBLISH_CONFIG_FILENAMES:
-            candidate = root / filename
-            if candidate.exists():
-                return candidate.resolve()
+    for filename in DEFAULT_PUBLISH_CONFIG_FILENAMES:
+        candidate = tooling_root / filename
+        if candidate.exists():
+            return candidate.resolve()
 
     return None
 
@@ -1275,35 +1302,50 @@ def publish_claude_skills(
     install_paths: dict[str, Path],
     history_dir: Path,
     config: PublisherConfig | None,
+    backup_root: Path,
 ) -> PublishResult:
     install_roots = resolve_claude_skills_roots(target, install_paths, config)
     state_path = state_file(history_dir, f"claude-skills-{target}-{family.name}")
     installed_skills: dict[str, dict[str, object]] = {}
     installed_count = 0
+    touched_destinations: list[tuple[Path, bool]] = []
+    any_existing_destination = False
 
-    for skill in skills:
-        if target not in skill.targets:
-            continue
-        skill_name = claude_skill_name(family, skill)
-        destinations: list[str] = []
-        for install_root in install_roots:
-            destination = install_root / skill_name
-            try:
-                remove_codex_skill_directory(destination)
-                destination.mkdir(parents=True, exist_ok=True)
-                write_text(destination / "SKILL.md", render_claude_skill_markdown(family, skill, target))
-            except PermissionError as exc:
-                raise ValidationError(
-                    f"Cannot install Claude skill {skill_name} into {destination}. "
-                    "The deploy process needs write permission to Claude's skills directory. "
-                    "Set CLAUDE_CONFIG_DIR, use --install-path, or run locally with sufficient permissions."
-                ) from exc
-            destinations.append(str(destination))
-        installed_skills[skill.skill_id] = {
-            "skill_name": skill_name,
-            "destinations": destinations,
-        }
-        installed_count += 1
+    try:
+        for skill in skills:
+            if target not in skill.targets:
+                continue
+            skill_name = claude_skill_name(family, skill)
+            installations: list[dict[str, object]] = []
+            for install_root in install_roots:
+                destination = install_root / skill_name
+                try:
+                    had_existing_destination, _ = backup_existing_destination(backup_root, destination)
+                    any_existing_destination = any_existing_destination or had_existing_destination
+                    touched_destinations.append((destination, had_existing_destination))
+                    destination.mkdir(parents=True, exist_ok=True)
+                    write_text(destination / "SKILL.md", render_claude_skill_markdown(family, skill, target))
+                except PermissionError as exc:
+                    raise ValidationError(
+                        f"Cannot install Claude skill {skill_name} into {destination}. "
+                        "The deploy process needs write permission to Claude's skills directory. "
+                        "Set CLAUDE_CONFIG_DIR, use --install-path, or run locally with sufficient permissions."
+                    ) from exc
+                installations.append(
+                    {
+                        "destination": str(destination),
+                        "had_existing_destination": had_existing_destination,
+                    }
+                )
+            installed_skills[skill.skill_id] = {
+                "skill_name": skill_name,
+                "installations": installations,
+            }
+            installed_count += 1
+    except Exception:
+        for destination, had_existing_destination in reversed(touched_destinations):
+            restore_destination_from_backup(destination, had_existing_destination, backup_root)
+        raise
 
     write_json(
         state_path,
@@ -1312,6 +1354,7 @@ def publish_claude_skills(
             "family": family.name,
             "skills_roots": [str(root) for root in install_roots],
             "skills": installed_skills,
+            "backup_root": str(backup_root),
             "updated_at": datetime.now(timezone.utc).isoformat(),
         },
     )
@@ -1322,7 +1365,9 @@ def publish_claude_skills(
         destination=state_path,
         publish_result=f"installed {installed_count} Claude skill(s) into {format_path_list(install_roots)}; state {state_path}",
         verification_result=f"verified {installed_count} Claude skill(s) across {len(install_roots)} root(s)",
-        rollback_mode="none",
+        rollback_mode="skills_restore",
+        backup_path=backup_root,
+        had_existing_destination=any_existing_destination,
     )
 
 
@@ -1334,35 +1379,50 @@ def publish_codex_skills(
     install_paths: dict[str, Path],
     history_dir: Path,
     config: PublisherConfig | None,
+    backup_root: Path,
 ) -> PublishResult:
     install_roots = resolve_codex_skills_roots(install_paths, config)
     state_path = state_file(history_dir, f"codex-skills-{target}-{family.name}")
     installed_skills: dict[str, dict[str, object]] = {}
     installed_count = 0
+    touched_destinations: list[tuple[Path, bool]] = []
+    any_existing_destination = False
 
-    for skill in skills:
-        if target not in skill.targets:
-            continue
-        skill_name = codex_skill_name(family, skill)
-        destinations: list[str] = []
-        for install_root in install_roots:
-            destination = install_root / skill_name
-            try:
-                remove_codex_skill_directory(destination)
-                destination.mkdir(parents=True, exist_ok=True)
-                write_text(destination / "SKILL.md", render_codex_skill_markdown(family, skill, target))
-            except PermissionError as exc:
-                raise ValidationError(
-                    f"Cannot install Codex skill {skill_name} into {destination}. "
-                    "The deploy process needs write permission to the Codex skills directory. "
-                    "Set CODEX_HOME or SKILL_TOOLING_CODEX_INSTALL_ROOT to a writable location, or run locally with sufficient permissions."
-                ) from exc
-            destinations.append(str(destination))
-        installed_skills[skill.skill_id] = {
-            "skill_name": skill_name,
-            "destinations": destinations,
-        }
-        installed_count += 1
+    try:
+        for skill in skills:
+            if target not in skill.targets:
+                continue
+            skill_name = codex_skill_name(family, skill)
+            installations: list[dict[str, object]] = []
+            for install_root in install_roots:
+                destination = install_root / skill_name
+                try:
+                    had_existing_destination, _ = backup_existing_destination(backup_root, destination)
+                    any_existing_destination = any_existing_destination or had_existing_destination
+                    touched_destinations.append((destination, had_existing_destination))
+                    destination.mkdir(parents=True, exist_ok=True)
+                    write_text(destination / "SKILL.md", render_codex_skill_markdown(family, skill, target))
+                except PermissionError as exc:
+                    raise ValidationError(
+                        f"Cannot install Codex skill {skill_name} into {destination}. "
+                        "The deploy process needs write permission to the Codex skills directory. "
+                        "Set CODEX_HOME or SKILL_TOOLING_CODEX_INSTALL_ROOT to a writable location, or run locally with sufficient permissions."
+                    ) from exc
+                installations.append(
+                    {
+                        "destination": str(destination),
+                        "had_existing_destination": had_existing_destination,
+                    }
+                )
+            installed_skills[skill.skill_id] = {
+                "skill_name": skill_name,
+                "installations": installations,
+            }
+            installed_count += 1
+    except Exception:
+        for destination, had_existing_destination in reversed(touched_destinations):
+            restore_destination_from_backup(destination, had_existing_destination, backup_root)
+        raise
 
     write_json(
         state_path,
@@ -1371,6 +1431,7 @@ def publish_codex_skills(
             "family": family.name,
             "skills_roots": [str(root) for root in install_roots],
             "skills": installed_skills,
+            "backup_root": str(backup_root),
             "updated_at": datetime.now(timezone.utc).isoformat(),
         },
     )
@@ -1381,7 +1442,9 @@ def publish_codex_skills(
         destination=state_path,
         publish_result=f"installed {installed_count} Codex skill(s) into {format_path_list(install_roots)}; state {state_path}",
         verification_result=f"verified {installed_count} Codex skill(s) across {len(install_roots)} root(s)",
-        rollback_mode="none",
+        rollback_mode="skills_restore",
+        backup_path=backup_root,
+        had_existing_destination=any_existing_destination,
     )
 
 
@@ -1631,10 +1694,10 @@ def publish_with_rollback(
         return publish_claude_agent(bundle_dir, target, family, history_dir, config)
 
     if config.mode == "claude-skills":
-        return publish_claude_skills(bundle_dir, target, family, skills, install_paths, history_dir, config)
+        return publish_claude_skills(bundle_dir, target, family, skills, install_paths, history_dir, config, backup_root / target)
 
     if config.mode == "codex-skills":
-        return publish_codex_skills(bundle_dir, target, family, skills, install_paths, history_dir, config)
+        return publish_codex_skills(bundle_dir, target, family, skills, install_paths, history_dir, config, backup_root / target)
 
     if config.mode == "copy":
         destination, backup_path, had_existing_destination = publish_copy(
@@ -1887,8 +1950,7 @@ def create_family_repo(args: argparse.Namespace) -> int:
             "",
             "- `family.json` is family metadata, not a manually maintained skill index.",
             "- `source/` contains the canonical authored skill files.",
-            "- Top-level tool folders like `grok/` and `claude/` are generated by `skill-tooling`.",
-            "- `overrides/<skill-id>/<target>.md` is optional and only used when a tool needs different wording.",
+            "- `dist/<target>/` contains generated deployable artifacts.",
             "",
             "## Layout",
             "",
@@ -1897,12 +1959,12 @@ def create_family_repo(args: argparse.Namespace) -> int:
             "  family.json",
             "  source/",
             f"    {orchestrator_id}.md",
-            "  overrides/",
-            f"    {orchestrator_id}/",
-            "      claude.md",
-            "  grok/",
-            "  claude/",
-            "  codex/",
+            "  dist/",
+            "    grok/",
+            "    claude/",
+            "    openai-skills-api/",
+            "    chatgpt-work/",
+            "    codex/",
             "```",
             "",
             "## Common Commands",
@@ -1923,13 +1985,7 @@ def create_family_repo(args: argparse.Namespace) -> int:
     )
     write_text(repo_path / "README.md", readme)
     gitignore_lines = [
-        "grok/",
-        "grok-build/",
-        "claude/",
-        "claude-code/",
-        "openai-skills-api/",
-        "chatgpt-work/",
-        "codex/",
+        "dist/",
         ".skill-tooling/",
         ".env",
         ".env.*",
@@ -1945,7 +2001,6 @@ def create_family_repo(args: argparse.Namespace) -> int:
             "---",
             "name: Orchestrator",
             f"description: Primary orchestrator for the {family_name} family",
-            f"targets: {', '.join(targets)}",
             "---",
             "",
             "# Orchestrator",
@@ -1964,22 +2019,11 @@ def create_family_repo(args: argparse.Namespace) -> int:
     )
     write_text(repo_path / "source" / f"{orchestrator_id}.md", source_markdown)
 
-    example_override = "\n".join(
-        [
-            "# Orchestrator",
-            "",
-            "Use the Claude-specific framing for this skill when needed.",
-            "",
-        ]
-    )
-    write_text(repo_path / "overrides" / orchestrator_id / "claude.md", example_override)
-
     print(f"Created family repository at {repo_path}")
     print("Next steps:")
     print(f"1. Replace the scaffolded content in {repo_path / 'source' / f'{orchestrator_id}.md'}")
-    print(f"2. Remove or replace the example override in {repo_path / 'overrides' / orchestrator_id / 'claude.md'}")
-    print(f"3. Adjust {repo_path / 'family.json'} only if you need different metadata, version, or targets")
-    print("4. Run scripts/skill-deploy from the family repo to generate tool folders")
+    print(f"2. Adjust {repo_path / 'family.json'} only if you need different metadata, version, or targets")
+    print("3. Run scripts/skill-deploy from the family repo to generate tool folders")
     return 0
 
 
@@ -1993,9 +2037,7 @@ def validate_family_repo(args: argparse.Namespace) -> int:
     print(f"Targets: {', '.join(family.targets)}")
     print(f"Skills: {len(skills)}")
     for skill in skills:
-        overrides = ", ".join(sorted(skill.target_overrides))
-        suffix = f" | overrides: {overrides}" if overrides else ""
-        print(f"- {skill.skill_id}: {', '.join(skill.targets)}{suffix}")
+        print(f"- {skill.skill_id}: {', '.join(skill.targets)}")
     print("Validation passed.")
     return 0
 
@@ -2173,6 +2215,42 @@ def rollback_deployment(args: argparse.Namespace) -> int:
                 raise ValidationError(f"Receipt is missing rollback command for target {target}")
             run_templated_command(rollback_command, {}, f"Rollback command failed for target {target}: {' '.join(rollback_command)}")
             print(f"Rolled back {target}: command completed")
+            continue
+
+        if rollback_mode == "skills_restore":
+            if destination_path is None:
+                raise ValidationError(f"Receipt is missing state destination for target {target}")
+            state = read_json_if_exists(destination_path)
+            if state is None:
+                raise ValidationError(f"Rollback state file missing for target {target}: {destination_path}")
+
+            backup_path_value = rollback_info.get("backup_path") or state.get("backup_root")
+            if not backup_path_value:
+                raise ValidationError(f"Rollback backup root missing for target {target}")
+            backup_root = Path(str(backup_path_value)).expanduser().resolve()
+
+            restored_count = 0
+            for skill_state in state.get("skills", {}).values():
+                raw_installations = skill_state.get("installations")
+                if raw_installations is None:
+                    raw_destinations = skill_state.get("destinations", [])
+                    raw_installations = [
+                        {
+                            "destination": raw_destination,
+                            "had_existing_destination": False,
+                        }
+                        for raw_destination in raw_destinations
+                    ]
+                for installation in raw_installations:
+                    destination_value = installation.get("destination")
+                    if not destination_value:
+                        continue
+                    destination = Path(str(destination_value)).expanduser().resolve()
+                    had_existing_destination = bool(installation.get("had_existing_destination"))
+                    restore_destination_from_backup(destination, had_existing_destination, backup_root)
+                    restored_count += 1
+
+            print(f"Rolled back {target}: restored {restored_count} installed skill destination(s)")
             continue
 
         print(f"Skipped {target}: target is not rollbackable from this receipt")
