@@ -2,6 +2,8 @@
 
 Each skill family lives in its own repository. `skill-tooling` operates on those external family repos.
 
+If an LLM needs the exact shortest authoring rules, use [llm-authoring-contract.md](./llm-authoring-contract.md) first.
+
 ## Required Layout
 
 ```text
