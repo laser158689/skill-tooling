@@ -15,7 +15,7 @@ unset SKILL_TOOLING_GROK_INSTALL_ROOT
 unset SKILL_TOOLING_GROK_BUILD_INSTALL_ROOT
 unset SKILL_TOOLING_CLAUDE_INSTALL_ROOT
 unset SKILL_TOOLING_CLAUDE_CODE_INSTALL_ROOT
-unset SKILL_TOOLING_OPENAI_CHATGPT_INSTALL_ROOT
+unset SKILL_TOOLING_OPENAI_SKILLS_API_INSTALL_ROOT
 unset SKILL_TOOLING_CODEX_INSTALL_ROOT
 
 FAMILY_NAME="customer-support"
@@ -23,8 +23,12 @@ FAMILY_DIR="$TMP_DIR/$FAMILY_NAME"
 PUBLISH_ROOT="$TMP_DIR/published"
 CONFIG_FILE="$REPO_ROOT/publish-config.json"
 CODEX_CONFIG_FILE="$TMP_DIR/codex-publish-config.json"
+CODEX_DEFAULT_CONFIG_FILE="$TMP_DIR/codex-default-publish-config.json"
 HISTORY_DIR="$TMP_DIR/history"
 CODEX_HOME_ROOT="$TMP_DIR/codex-home"
+CODEX_DEFAULT_HOME="$TMP_DIR/default-home"
+CLAUDE_CONFIG_FILE="$TMP_DIR/claude-publish-config.json"
+CLAUDE_CONFIG_ROOT="$TMP_DIR/claude-home"
 
 "$REPO_ROOT/scripts/create-family" "$FAMILY_NAME" "Reusable support skills" --path "$TMP_DIR"
 "$REPO_ROOT/scripts/validate-family" --source "$FAMILY_DIR"
@@ -55,7 +59,7 @@ cat > "$TMP_CONFIG_FILE" <<EOF
     "grok-build": { "mode": "copy", "install_root": "$PUBLISH_ROOT/grok-build" },
     "claude": { "mode": "copy", "install_root": "$PUBLISH_ROOT/claude" },
     "claude-code": { "mode": "copy", "install_root": "$PUBLISH_ROOT/claude-code" },
-    "openai-chatgpt": { "mode": "copy", "install_root": "$PUBLISH_ROOT/openai-chatgpt" },
+    "openai-skills-api": { "mode": "copy", "install_root": "$PUBLISH_ROOT/openai-skills-api" },
     "codex": { "mode": "copy", "install_root": "$PUBLISH_ROOT/codex" }
   }
 }
@@ -65,6 +69,23 @@ cat > "$CODEX_CONFIG_FILE" <<EOF
 {
   "targets": {
     "codex": { "mode": "codex-skills" }
+  }
+}
+EOF
+
+cat > "$CODEX_DEFAULT_CONFIG_FILE" <<EOF
+{
+  "targets": {
+    "codex": { "mode": "codex-skills" }
+  }
+}
+EOF
+
+cat > "$CLAUDE_CONFIG_FILE" <<EOF
+{
+  "targets": {
+    "claude": { "mode": "claude-skills" },
+    "claude-code": { "mode": "claude-skills" }
   }
 }
 EOF
@@ -81,6 +102,8 @@ git -C "$FAMILY_DIR" commit -q -m "Initial family"
 
 "$REPO_ROOT/scripts/skill-deploy" --repo "$FAMILY_DIR" --publish --config "$TMP_CONFIG_FILE" --history-dir "$HISTORY_DIR"
 SKILL_TOOLING_ENV_FILE="$TMP_DIR/family.env" "$REPO_ROOT/scripts/skill-deploy" --source "$FAMILY_DIR" --publish --target codex --config "$CODEX_CONFIG_FILE" --history-dir "$TMP_DIR/codex-history"
+HOME="$CODEX_DEFAULT_HOME" CODEX_HOME="" SKILL_TOOLING_CODEX_INSTALL_ROOT="" "$REPO_ROOT/scripts/skill-deploy" --source "$FAMILY_DIR" --publish --target codex --config "$CODEX_DEFAULT_CONFIG_FILE" --history-dir "$TMP_DIR/codex-default-history"
+CLAUDE_CONFIG_DIR="$CLAUDE_CONFIG_ROOT" "$REPO_ROOT/scripts/skill-deploy" --source "$FAMILY_DIR" --publish --target claude --config "$CLAUDE_CONFIG_FILE" --history-dir "$TMP_DIR/claude-history"
 printf '\n<!-- release smoke -->\n' >> "$FAMILY_DIR/source/orchestrator.md"
 "$REPO_ROOT/scripts/skill-deploy" --source "$FAMILY_DIR" --target codex --git --branch codex/release-smoke --commit-message "Release family" --history-dir "$TMP_DIR/release-history"
 
@@ -119,9 +142,13 @@ test -f "$FAMILY_DIR/claude/orchestrator.skill"
 grep -q "Claude-specific" "$FAMILY_DIR/claude/orchestrator.skill"
 
 test -f "$FAMILY_DIR/codex/family.prompt"
-test -f "$FAMILY_DIR/openai-chatgpt/orchestrator.prompt"
+test -f "$FAMILY_DIR/openai-skills-api/orchestrator.prompt"
 test -f "$CODEX_HOME_ROOT/skills/${FAMILY_NAME}--orchestrator/SKILL.md"
 grep -q "name: \"${FAMILY_NAME}--orchestrator\"" "$CODEX_HOME_ROOT/skills/${FAMILY_NAME}--orchestrator/SKILL.md"
+test -f "$CODEX_DEFAULT_HOME/.agents/skills/${FAMILY_NAME}--orchestrator/SKILL.md"
+grep -q "name: \"${FAMILY_NAME}--orchestrator\"" "$CODEX_DEFAULT_HOME/.agents/skills/${FAMILY_NAME}--orchestrator/SKILL.md"
+test -f "$CLAUDE_CONFIG_ROOT/skills/${FAMILY_NAME}--orchestrator/SKILL.md"
+grep -q "description: Primary orchestrator for the ${FAMILY_NAME} family" "$CLAUDE_CONFIG_ROOT/skills/${FAMILY_NAME}--orchestrator/SKILL.md"
 
 test -f "$PUBLISH_ROOT/grok/$FAMILY_NAME/orchestrator.grok"
 test -f "$PUBLISH_ROOT/claude/$FAMILY_NAME/orchestrator.skill"

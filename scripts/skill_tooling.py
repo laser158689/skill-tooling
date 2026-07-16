@@ -28,14 +28,16 @@ TARGET_INSTALL_ENV = {
     "grok-build": "SKILL_TOOLING_GROK_BUILD_INSTALL_ROOT",
     "claude": "SKILL_TOOLING_CLAUDE_INSTALL_ROOT",
     "claude-code": "SKILL_TOOLING_CLAUDE_CODE_INSTALL_ROOT",
-    "openai-chatgpt": "SKILL_TOOLING_OPENAI_CHATGPT_INSTALL_ROOT",
+    "openai-skills-api": "SKILL_TOOLING_OPENAI_SKILLS_API_INSTALL_ROOT",
     "codex": "SKILL_TOOLING_CODEX_INSTALL_ROOT",
 }
 
 TARGET_ALIASES = {
-    "chatgpt": "openai-chatgpt",
-    "openai": "openai-chatgpt",
-    "openai-chatgpt": "openai-chatgpt",
+    "chatgpt-work": "chatgpt-work",
+    "chatgpt": "chatgpt-work",
+    "openai": "openai-skills-api",
+    "openai-skills": "openai-skills-api",
+    "openai-skills-api": "openai-skills-api",
     "claude": "claude",
     "claude-code": "claude-code",
     "grok": "grok",
@@ -48,16 +50,27 @@ TARGET_FILE_EXTENSIONS = {
     "grok-build": ".grokbuild",
     "claude": ".skill",
     "claude-code": ".skill",
-    "openai-chatgpt": ".prompt",
+    "openai-skills-api": ".prompt",
+    "chatgpt-work": ".prompt",
     "codex": ".prompt",
 }
+
+SUPPORTED_TARGETS = [
+    "grok",
+    "grok-build",
+    "claude",
+    "claude-code",
+    "openai-skills-api",
+    "chatgpt-work",
+    "codex",
+]
 
 DEFAULT_TARGETS = [
     "grok",
     "grok-build",
     "claude",
     "claude-code",
-    "openai-chatgpt",
+    "openai-skills-api",
     "codex",
 ]
 TARGET_DISPLAY_NAMES = {
@@ -65,7 +78,8 @@ TARGET_DISPLAY_NAMES = {
     "grok-build": "Grok Build",
     "claude": "Claude",
     "claude-code": "Claude Code",
-    "openai-chatgpt": "OpenAI/ChatGPT",
+    "openai-skills-api": "OpenAI Skills API",
+    "chatgpt-work": "ChatGPT Work",
     "codex": "Codex",
 }
 DEFAULT_PUBLISH_CONFIG_FILENAMES = ("publish-config.json",)
@@ -117,7 +131,7 @@ FAMILY_MANIFEST_SCHEMA = {
             "uniqueItems": True,
             "items": {
                 "type": "string",
-                "enum": DEFAULT_TARGETS,
+                "enum": SUPPORTED_TARGETS,
             },
             "description": "Targets enabled for this family by default.",
         },
@@ -141,7 +155,7 @@ PUBLISH_CONFIG_SCHEMA = {
                 "properties": {
                     "mode": {
                         "type": "string",
-                        "enum": ["copy", "command", "openai-skills", "claude-agent", "codex-skills"],
+                        "enum": ["copy", "command", "manual", "openai-skills", "claude-agent", "claude-skills", "codex-skills"],
                     },
                     "install_root": {"type": "string"},
                     "command": {"type": "array", "items": {"type": "string"}},
@@ -459,6 +473,14 @@ def load_manifest(source: Path) -> Family:
     except json.JSONDecodeError as exc:
         raise ValidationError(f"{manifest_path} is not valid JSON: {exc}") from exc
 
+    raw_targets = manifest.get("targets")
+    if isinstance(raw_targets, list) and "openai-chatgpt" in raw_targets:
+        raise ValidationError(
+            f"{manifest_path} uses deprecated target `openai-chatgpt`. "
+            "Rename it to `openai-skills-api`. "
+            "`chatgpt-work` is now treated as a separate product surface."
+        )
+
     validate_against_schema(manifest, FAMILY_MANIFEST_SCHEMA)
 
     family_data = manifest.get("skill_family")
@@ -583,17 +605,81 @@ def codex_skill_name(family: Family, skill: Skill) -> str:
     return f"{family.name}--{skill.skill_id}"
 
 
-def resolve_codex_skills_root(
+def claude_skill_name(family: Family, skill: Skill) -> str:
+    return f"{family.name}--{skill.skill_id}"
+
+
+def resolve_claude_config_root() -> Path:
+    configured_root = os.environ.get("CLAUDE_CONFIG_DIR")
+    if configured_root:
+        return Path(configured_root).expanduser().resolve()
+    return Path.home() / ".claude"
+
+
+def configured_claude_skills_root(
+    target: str,
     install_paths: dict[str, Path],
     config: PublisherConfig | None,
-) -> Path:
+) -> Path | None:
+    direct_root = resolve_install_root(target, install_paths, config)
+    if direct_root is not None:
+        return direct_root
+    return resolve_claude_config_root() / "skills"
+
+
+def resolve_claude_skills_roots(
+    target: str,
+    install_paths: dict[str, Path],
+    config: PublisherConfig | None,
+) -> list[Path]:
+    return [configured_claude_skills_root(target, install_paths, config)]
+
+
+def configured_codex_skills_root(
+    install_paths: dict[str, Path],
+    config: PublisherConfig | None,
+) -> Path | None:
     direct_root = resolve_install_root("codex", install_paths, config)
     if direct_root is not None:
         return direct_root
     codex_home = os.environ.get("CODEX_HOME")
     if codex_home:
         return Path(codex_home).expanduser().resolve() / "skills"
-    return Path.home() / ".codex" / "skills"
+    return None
+
+
+def resolve_codex_skills_root(
+    install_paths: dict[str, Path],
+    config: PublisherConfig | None,
+) -> Path:
+    return resolve_codex_skills_roots(install_paths, config)[0]
+
+
+def resolve_codex_skills_roots(
+    install_paths: dict[str, Path],
+    config: PublisherConfig | None,
+) -> list[Path]:
+    configured_root = configured_codex_skills_root(install_paths, config)
+    if configured_root is not None:
+        return [configured_root]
+
+    documented_root = Path.home() / ".agents" / "skills"
+    legacy_root = Path.home() / ".codex" / "skills"
+    roots = [documented_root]
+    if legacy_root.exists():
+        roots.append(legacy_root)
+    return dedupe_preserve_order(roots)
+
+
+def format_path_list(paths: list[Path]) -> str:
+    return ", ".join(str(path) for path in paths)
+
+
+def remove_codex_skill_directory(destination: Path) -> None:
+    if destination.is_symlink() or destination.is_file():
+        destination.unlink()
+    elif destination.exists():
+        shutil.rmtree(destination)
 
 
 def load_skill_overrides(repo_root: Path, skill_id: str, skill_targets: list[str]) -> dict[str, str]:
@@ -784,6 +870,8 @@ def render_target_bundle(output_root: Path, family: Family, skills: list[Skill],
     write_text(bundle_dir / f"family{ext}", render_family_target_text(family, target_skills, target))
     for skill in target_skills:
         write_text(bundle_dir / f"{skill.skill_id}{ext}", render_target_skill_text(family, skill, target))
+    if target == "chatgpt-work":
+        write_text(bundle_dir / "INSTALL.md", render_chatgpt_work_install_guide(family, target_skills))
 
     return bundle_dir
 
@@ -836,9 +924,9 @@ def load_publish_config(config_path: Path | None) -> dict[str, PublisherConfig]:
             raise ValidationError(f"Publisher config for {target} must be an object")
 
         mode = str(raw_config.get("mode", raw_config.get("publish", "copy"))).strip().lower()
-        if mode not in {"copy", "command", "openai-skills", "claude-agent", "codex-skills"}:
+        if mode not in {"copy", "command", "manual", "openai-skills", "claude-agent", "claude-skills", "codex-skills"}:
             raise ValidationError(
-                f"Publisher mode for {target} must be copy, command, openai-skills, claude-agent, or codex-skills"
+                f"Publisher mode for {target} must be copy, command, manual, openai-skills, claude-agent, claude-skills, or codex-skills"
             )
 
         install_root = None
@@ -968,6 +1056,9 @@ def preflight_publish_target(
         config = PublisherConfig(mode="copy")
 
     mode = config.mode
+    if mode == "manual":
+        return mode, "manual handoff bundle"
+
     if mode == "copy":
         install_root = resolve_install_root(target, install_paths, config)
         if install_root is None:
@@ -999,10 +1090,17 @@ def preflight_publish_target(
             raise ValidationError(f"{target}: required Claude executable not found: {cli_path}")
         return mode, str(executable)
 
+    if mode == "claude-skills":
+        install_roots = resolve_claude_skills_roots(target, install_paths, config)
+        for install_root in install_roots:
+            ensure_writable_directory(install_root, f"{target} skills root")
+        return mode, f"skills root(s) {format_path_list(install_roots)}"
+
     if mode == "codex-skills":
-        install_root = resolve_codex_skills_root(install_paths, config)
-        ensure_writable_directory(install_root, f"{target} skills root")
-        return mode, f"skills root {install_root}"
+        install_roots = resolve_codex_skills_roots(install_paths, config)
+        for install_root in install_roots:
+            ensure_writable_directory(install_root, f"{target} skills root")
+        return mode, f"skills root(s) {format_path_list(install_roots)}"
 
     raise ValidationError(f"{target}: unsupported publish mode {mode}")
 
@@ -1106,6 +1204,21 @@ def build_openai_skill_bundle(skill: Skill, family: Family, target: str, work_di
     return zip_path
 
 
+def render_claude_skill_markdown(family: Family, skill: Skill, target: str) -> str:
+    return "\n".join(
+        [
+            "---",
+            f"description: {skill.description}",
+            "---",
+            "",
+            f"# {claude_skill_name(family, skill)}",
+            "",
+            get_target_body(skill, target).rstrip(),
+            "",
+        ]
+    )
+
+
 def render_codex_skill_markdown(family: Family, skill: Skill, target: str) -> str:
     return "\n".join(
         [
@@ -1119,6 +1232,100 @@ def render_codex_skill_markdown(family: Family, skill: Skill, target: str) -> st
     )
 
 
+def render_chatgpt_work_install_guide(family: Family, skills: list[Skill]) -> str:
+    lines = [
+        f"# ChatGPT Work Manual Build - {family.name}",
+        "",
+        "This target does not have a built-in API publisher in `skill-tooling`.",
+        "Use the generated `.prompt` files in this directory to create ChatGPT Work skills manually.",
+        "",
+        "Recommended flow:",
+        "",
+        "1. Open the ChatGPT Work Skills screen.",
+        "2. Create one ChatGPT skill per generated `.prompt` file.",
+        "3. Paste the matching prompt content and save the skill.",
+        "",
+        "Generated skills:",
+        "",
+    ]
+    for skill in skills:
+        lines.append(f"- `{skill.skill_id}.prompt`")
+    lines.append("")
+    return "\n".join(lines)
+
+
+def publish_manual_bundle(bundle_dir: Path, target: str) -> PublishResult:
+    destination = bundle_dir / "INSTALL.md"
+    return PublishResult(
+        target=target,
+        mode="manual",
+        bundle_dir=bundle_dir,
+        destination=destination,
+        publish_result=f"manual handoff prepared at {destination}",
+        verification_result="manual handoff bundle created",
+        rollback_mode="none",
+    )
+
+
+def publish_claude_skills(
+    bundle_dir: Path,
+    target: str,
+    family: Family,
+    skills: list[Skill],
+    install_paths: dict[str, Path],
+    history_dir: Path,
+    config: PublisherConfig | None,
+) -> PublishResult:
+    install_roots = resolve_claude_skills_roots(target, install_paths, config)
+    state_path = state_file(history_dir, f"claude-skills-{target}-{family.name}")
+    installed_skills: dict[str, dict[str, object]] = {}
+    installed_count = 0
+
+    for skill in skills:
+        if target not in skill.targets:
+            continue
+        skill_name = claude_skill_name(family, skill)
+        destinations: list[str] = []
+        for install_root in install_roots:
+            destination = install_root / skill_name
+            try:
+                remove_codex_skill_directory(destination)
+                destination.mkdir(parents=True, exist_ok=True)
+                write_text(destination / "SKILL.md", render_claude_skill_markdown(family, skill, target))
+            except PermissionError as exc:
+                raise ValidationError(
+                    f"Cannot install Claude skill {skill_name} into {destination}. "
+                    "The deploy process needs write permission to Claude's skills directory. "
+                    "Set CLAUDE_CONFIG_DIR, use --install-path, or run locally with sufficient permissions."
+                ) from exc
+            destinations.append(str(destination))
+        installed_skills[skill.skill_id] = {
+            "skill_name": skill_name,
+            "destinations": destinations,
+        }
+        installed_count += 1
+
+    write_json(
+        state_path,
+        {
+            "target": target,
+            "family": family.name,
+            "skills_roots": [str(root) for root in install_roots],
+            "skills": installed_skills,
+            "updated_at": datetime.now(timezone.utc).isoformat(),
+        },
+    )
+    return PublishResult(
+        target=target,
+        mode="claude-skills",
+        bundle_dir=bundle_dir,
+        destination=state_path,
+        publish_result=f"installed {installed_count} Claude skill(s) into {format_path_list(install_roots)}; state {state_path}",
+        verification_result=f"verified {installed_count} Claude skill(s) across {len(install_roots)} root(s)",
+        rollback_mode="none",
+    )
+
+
 def publish_codex_skills(
     bundle_dir: Path,
     target: str,
@@ -1128,30 +1335,32 @@ def publish_codex_skills(
     history_dir: Path,
     config: PublisherConfig | None,
 ) -> PublishResult:
-    install_root = resolve_codex_skills_root(install_paths, config)
+    install_roots = resolve_codex_skills_roots(install_paths, config)
     state_path = state_file(history_dir, f"codex-skills-{target}-{family.name}")
-    installed_skills: dict[str, dict[str, str]] = {}
+    installed_skills: dict[str, dict[str, object]] = {}
     installed_count = 0
 
     for skill in skills:
         if target not in skill.targets:
             continue
         skill_name = codex_skill_name(family, skill)
-        destination = install_root / skill_name
-        try:
-            if destination.exists():
-                shutil.rmtree(destination)
-            destination.mkdir(parents=True, exist_ok=True)
-            write_text(destination / "SKILL.md", render_codex_skill_markdown(family, skill, target))
-        except PermissionError as exc:
-            raise ValidationError(
-                f"Cannot install Codex skill {skill_name} into {destination}. "
-                "The deploy process needs write permission to the Codex skills directory. "
-                "Set CODEX_HOME or SKILL_TOOLING_CODEX_INSTALL_ROOT to a writable location, or run locally with sufficient permissions."
-            ) from exc
+        destinations: list[str] = []
+        for install_root in install_roots:
+            destination = install_root / skill_name
+            try:
+                remove_codex_skill_directory(destination)
+                destination.mkdir(parents=True, exist_ok=True)
+                write_text(destination / "SKILL.md", render_codex_skill_markdown(family, skill, target))
+            except PermissionError as exc:
+                raise ValidationError(
+                    f"Cannot install Codex skill {skill_name} into {destination}. "
+                    "The deploy process needs write permission to the Codex skills directory. "
+                    "Set CODEX_HOME or SKILL_TOOLING_CODEX_INSTALL_ROOT to a writable location, or run locally with sufficient permissions."
+                ) from exc
+            destinations.append(str(destination))
         installed_skills[skill.skill_id] = {
             "skill_name": skill_name,
-            "destination": str(destination),
+            "destinations": destinations,
         }
         installed_count += 1
 
@@ -1160,7 +1369,7 @@ def publish_codex_skills(
         {
             "target": target,
             "family": family.name,
-            "skills_root": str(install_root),
+            "skills_roots": [str(root) for root in install_roots],
             "skills": installed_skills,
             "updated_at": datetime.now(timezone.utc).isoformat(),
         },
@@ -1170,8 +1379,8 @@ def publish_codex_skills(
         mode="codex-skills",
         bundle_dir=bundle_dir,
         destination=state_path,
-        publish_result=f"installed {installed_count} Codex skill(s) into {install_root}; state {state_path}",
-        verification_result=f"verified {installed_count} Codex skill directory(s)",
+        publish_result=f"installed {installed_count} Codex skill(s) into {format_path_list(install_roots)}; state {state_path}",
+        verification_result=f"verified {installed_count} Codex skill(s) across {len(install_roots)} root(s)",
         rollback_mode="none",
     )
 
@@ -1412,11 +1621,17 @@ def publish_with_rollback(
     if config is None:
         config = PublisherConfig(mode="copy")
 
+    if config.mode == "manual":
+        return publish_manual_bundle(bundle_dir, target)
+
     if config.mode == "openai-skills":
         return publish_openai_skills(bundle_dir, target, family, skills, history_dir, config)
 
     if config.mode == "claude-agent":
         return publish_claude_agent(bundle_dir, target, family, history_dir, config)
+
+    if config.mode == "claude-skills":
+        return publish_claude_skills(bundle_dir, target, family, skills, install_paths, history_dir, config)
 
     if config.mode == "codex-skills":
         return publish_codex_skills(bundle_dir, target, family, skills, install_paths, history_dir, config)
@@ -1712,7 +1927,8 @@ def create_family_repo(args: argparse.Namespace) -> int:
         "grok-build/",
         "claude/",
         "claude-code/",
-        "openai-chatgpt/",
+        "openai-skills-api/",
+        "chatgpt-work/",
         "codex/",
         ".skill-tooling/",
         ".env",

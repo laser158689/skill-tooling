@@ -17,7 +17,8 @@ family-repo/
   grok-build/
   claude/
   claude-code/
-  openai-chatgpt/
+  openai-skills-api/
+  chatgpt-work/
   codex/
 ```
 
@@ -46,7 +47,8 @@ If a generated tool directory is changed by hand, the next deploy will overwrite
     "grok-build",
     "claude",
     "claude-code",
-    "openai-chatgpt",
+    "openai-skills-api",
+    "chatgpt-work",
     "codex"
   ]
 }

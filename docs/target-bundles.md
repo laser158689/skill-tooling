@@ -48,7 +48,8 @@ These generated folders serve two roles:
 - `grok-build` uses `.grokbuild`
 - `claude` uses `.skill`
 - `claude-code` uses `.skill`
-- `openai-chatgpt` uses `.prompt`
+- `openai-skills-api` uses `.prompt`
+- `chatgpt-work` uses `.prompt`
 - `codex` uses `.prompt`
 
 ## Publishing
@@ -58,14 +59,15 @@ Publishers are configured per target in JSON:
 ```json
 {
   "targets": {
-    "openai-chatgpt": {
+    "openai-skills-api": {
       "mode": "openai-skills",
       "api_key_env": "OPENAI_API_KEY"
     },
     "claude": {
-      "mode": "claude-agent",
-      "cli_path": "ant",
-      "model": "claude-opus-4-8"
+      "mode": "claude-skills"
+    },
+    "chatgpt-work": {
+      "mode": "manual"
     },
     "codex": {
       "mode": "codex-skills"
@@ -78,11 +80,15 @@ Publishers are configured per target in JSON:
 
 `command` mode invokes a local publish command so you can bridge into vendor-specific CLIs, APIs, or wrapper scripts without changing the canonical family repo layout.
 
-`openai-skills` publishes each skill in the family as its own hosted OpenAI skill and stores remote ids under `.skill-tooling/deployments/state/`.
+`manual` mode marks the generated folder as the final handoff artifact. This is used for targets like `chatgpt-work` where `skill-tooling` can prepare the exact text bundle and install guide, but not complete the vendor UI flow directly.
+
+`openai-skills` publishes each skill in the family as its own hosted OpenAI API skill and stores remote ids under `.skill-tooling/deployments/state/`.
 
 `claude-agent` publishes the generated family bundle as a hosted Claude agent and stores the agent id/version under `.skill-tooling/deployments/state/`.
 
-`codex-skills` installs one local Codex skill directory per source skill under `$CODEX_HOME/skills` by default, or under `SKILL_TOOLING_CODEX_INSTALL_ROOT` / `install_root` when provided.
+`claude-skills` installs one local Claude skill directory per source skill under Claude's documented skills directory.
+
+`codex-skills` installs one local Codex skill directory per source skill. Explicit roots from `--install-path codex=...`, `install_root`, `SKILL_TOOLING_CODEX_INSTALL_ROOT`, or `CODEX_HOME` are honored as single-root installs. Without an explicit root, the publisher installs to `$HOME/.agents/skills` and also updates `$HOME/.codex/skills` when that legacy/current-session directory already exists.
 
 ## Receipts And Rollback
 

@@ -69,7 +69,8 @@ my-family/
   grok-build/
   claude/
   claude-code/
-  openai-chatgpt/
+  openai-skills-api/
+  chatgpt-work/
   codex/
 ```
 
@@ -108,14 +109,16 @@ The current implementation does successfully provide:
   - `grok-build`
   - `claude`
   - `claude-code`
-  - `openai-chatgpt`
+  - `openai-skills-api`
+  - `chatgpt-work`
   - `codex`
 - Repo ingestion via `--repo`
 - Copy-based publishing into install roots
 - Command-based publishing hooks for external wrapper commands
-- Built-in OpenAI hosted skill publishing for `openai-chatgpt`
+- Built-in OpenAI hosted skill publishing for `openai-skills-api`
+- Built-in ChatGPT Work manual-handoff publishing for `chatgpt-work`
 - Built-in local Codex skill publishing for `codex`
-- Built-in Claude hosted agent publishing for `claude`
+- Built-in local Claude skill publishing for `claude` and `claude-code`
 - Deployment receipts and rollback support for copy-based publishers
 - CI smoke coverage for:
   - scaffold
@@ -136,8 +139,9 @@ Runtime assumptions:
 - The local machine or CI runner has filesystem access to any copy-publish roots
 - Any `command` publishers refer to locally installed wrapper commands or scripts
 - OpenAI hosted publishing requires an API key
-- Codex local publishing defaults to `$CODEX_HOME/skills`
-- Claude hosted publishing requires the Anthropic CLI on the runner
+- Claude local skill publishing defaults to `~/.claude/skills` and honors `CLAUDE_CONFIG_DIR`
+- Codex local publishing uses explicit roots when configured; otherwise it defaults to `$HOME/.agents/skills` and updates an existing `$HOME/.codex/skills` legacy/current-session root
+- Claude hosted agent publishing requires the Anthropic CLI only if you explicitly opt into `claude-agent`
 - Deploy auto-loads `.env` / `.skill-tooling.env` from the `skill-tooling` repo by default
 - Any non-default env file must be explicitly selected with `SKILL_TOOLING_ENV_FILE`
 
@@ -244,10 +248,11 @@ Fix:
 
 Current state:
 
-- `openai-chatgpt` can publish hosted skills through the OpenAI API
+- `openai-skills-api` publishes hosted skills through the OpenAI API
+- `chatgpt-work` prepares manual handoff bundles rather than completing a vendor UI flow
 - `codex` can publish local Codex skills into a Codex skills root
-- `claude` can publish a hosted agent through the Anthropic CLI
-- `grok`, `grok-build`, and `claude-code` still rely on `command` wrappers or copy/manual flows
+- `claude` and `claude-code` can publish local Claude skills into Claude's documented skills root
+- `grok` and `grok-build` still rely on `command` wrappers or copy/manual flows
 
 Issue:
 
