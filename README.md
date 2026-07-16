@@ -5,7 +5,7 @@
 It does two primary things:
 
 - Scaffolds a new family repository.
-- Generates and publishes tool-specific views for Grok, Grok Build, Claude Desktop / claude.ai manual handoff bundles, Claude Code, the OpenAI Skills API, ChatGPT Work manual handoff bundles, Codex, and future targets.
+- Generates and publishes tool-specific views for Grok, Grok Build, Grok web/app manual handoff bundles, Claude Desktop / claude.ai manual handoff bundles, Claude Code, the OpenAI Skills API, OpenAI plugin manual handoff bundles, ChatGPT Work manual handoff bundles, Codex, and future targets.
 
 Validation is part of deployment. You do not need to run a server or keep background infrastructure running.
 
@@ -42,9 +42,11 @@ my-family/
     researcher.md
   dist/
     grok/
+    grok-web/
     claude-ai/
     claude-code/
     openai-skills-api/
+    openai-plugin/
     chatgpt-work/
     codex/
 ```
@@ -65,6 +67,8 @@ Source skill note:
 Target migration note:
 - `openai-chatgpt` has been renamed to `openai-skills-api`.
 - `chatgpt-work` is a separate target for the ChatGPT Work UI flow and is not the same thing as the OpenAI Skills API.
+- `openai-plugin` is a separate target for packaged ChatGPT / Codex plugin distribution.
+- `grok-web` is a separate target for the Grok web/app Skills UI flow and is not the same thing as `grok-build`.
 - `claude` and `claude-local` are deprecated and rejected.
 - `claude-ai` is the manual Claude Desktop / claude.ai Skills surface.
 
@@ -182,8 +186,10 @@ Optional publisher fields:
 Current adapter status:
 
 - `openai-skills-api` has a built-in hosted publisher via `openai-skills`.
+- `openai-plugin` has a built-in manual package publisher that writes a plugin bundle and install guide for ChatGPT / Codex workspace distribution.
 - `chatgpt-work` has a built-in manual-handoff publisher that writes the exact bundle and install guide for the ChatGPT Work UI flow.
 - `grok` and `grok-build` have built-in local publishers via `grok-skills`.
+- `grok-web` has a built-in manual-handoff publisher that writes upload-oriented Grok Skills bundles and an install guide.
 - `codex` has a built-in local publisher via `codex-skills`.
 - `claude-ai` has a built-in manual-handoff publisher for the Claude Desktop / claude.ai Skills UI.
 - `claude-code` has a built-in local publisher via `claude-skills`.
@@ -258,16 +264,20 @@ Current targets:
 
 - `grok`
 - `grok-build`
+- `grok-web`
 - `claude-ai`
 - `claude-code`
 - `openai-skills-api`
+- `openai-plugin`
 - `chatgpt-work`
 - `codex`
 
 Current gaps:
 
 - `chatgpt-work` automatic publishing
+- `openai-plugin` automatic publishing
 - `claude-ai` automatic publishing
+- `grok-web` automatic publishing
 - hosted/API rollback for `openai-skills` and `claude-agent`
 
 The generated folder shapes are documented in [docs/target-bundles.md](docs/target-bundles.md).

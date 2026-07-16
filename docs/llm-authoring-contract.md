@@ -51,9 +51,11 @@ Minimum valid shape:
   "targets": [
     "grok",
     "grok-build",
+    "grok-web",
     "claude-ai",
     "claude-code",
     "openai-skills-api",
+    "openai-plugin",
     "chatgpt-work",
     "codex"
   ]

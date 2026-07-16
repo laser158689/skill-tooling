@@ -26,9 +26,11 @@ from typing import Iterable
 TARGET_INSTALL_ENV = {
     "grok": "SKILL_TOOLING_GROK_INSTALL_ROOT",
     "grok-build": "SKILL_TOOLING_GROK_BUILD_INSTALL_ROOT",
+    "grok-web": "SKILL_TOOLING_GROK_WEB_INSTALL_ROOT",
     "claude-ai": "SKILL_TOOLING_CLAUDE_AI_INSTALL_ROOT",
     "claude-code": "SKILL_TOOLING_CLAUDE_CODE_INSTALL_ROOT",
     "openai-skills-api": "SKILL_TOOLING_OPENAI_SKILLS_API_INSTALL_ROOT",
+    "openai-plugin": "SKILL_TOOLING_OPENAI_PLUGIN_INSTALL_ROOT",
     "chatgpt-work": "SKILL_TOOLING_CHATGPT_WORK_INSTALL_ROOT",
     "codex": "SKILL_TOOLING_CODEX_INSTALL_ROOT",
 }
@@ -43,25 +45,77 @@ TARGET_ALIASES = {
     "claude-code": "claude-code",
     "grok": "grok",
     "grok-build": "grok-build",
+    "grok-web": "grok-web",
+    "openai-plugin": "openai-plugin",
     "codex": "codex",
 }
 
-TARGET_FILE_EXTENSIONS = {
-    "grok": ".grok",
-    "grok-build": ".grokbuild",
-    "claude-ai": ".skill",
-    "claude-code": ".skill",
-    "openai-skills-api": ".prompt",
-    "chatgpt-work": ".prompt",
-    "codex": ".prompt",
+TARGET_PROFILES = {
+    "grok": {
+        "extension": ".grok",
+        "artifact_contract": "Local Grok skill bundle for filesystem install.",
+        "family_bundle_label": "aggregated family reference text",
+        "per_skill_label": "per-skill Grok bundle text",
+    },
+    "grok-build": {
+        "extension": ".grokbuild",
+        "artifact_contract": "Local Grok Build skill bundle for filesystem install.",
+        "family_bundle_label": "aggregated family reference text",
+        "per_skill_label": "per-skill Grok Build bundle text",
+    },
+    "grok-web": {
+        "extension": ".md",
+        "artifact_contract": "Manual Grok web/app Skills handoff bundle.",
+        "family_bundle_label": "family-level Grok web reference bundle",
+        "per_skill_label": "per-skill Grok web upload source",
+    },
+    "claude-ai": {
+        "extension": ".skill",
+        "artifact_contract": "Manual Claude Skills handoff bundle for Claude Desktop / claude.ai.",
+        "family_bundle_label": "family-level reference bundle",
+        "per_skill_label": "per-skill Claude Skills handoff file",
+    },
+    "claude-code": {
+        "extension": ".skill",
+        "artifact_contract": "Local Claude Code skill bundle for filesystem install.",
+        "family_bundle_label": "aggregated family reference text",
+        "per_skill_label": "per-skill Claude Code bundle text",
+    },
+    "openai-skills-api": {
+        "extension": ".prompt",
+        "artifact_contract": "Hosted OpenAI Skills API source bundle.",
+        "family_bundle_label": "family-level reference prompt",
+        "per_skill_label": "per-skill hosted OpenAI skill prompt",
+    },
+    "openai-plugin": {
+        "extension": ".md",
+        "artifact_contract": "Manual OpenAI plugin package for ChatGPT / Codex workspace distribution.",
+        "family_bundle_label": "plugin manifest and package root",
+        "per_skill_label": "packaged skill inside the plugin bundle",
+    },
+    "chatgpt-work": {
+        "extension": ".prompt",
+        "artifact_contract": "Manual ChatGPT Skills handoff bundle for workspace/UI creation.",
+        "family_bundle_label": "family-level reference prompt",
+        "per_skill_label": "per-skill ChatGPT manual upload prompt",
+    },
+    "codex": {
+        "extension": ".prompt",
+        "artifact_contract": "Local Codex skill source bundle for filesystem install.",
+        "family_bundle_label": "family-level reference prompt",
+        "per_skill_label": "per-skill Codex bundle text",
+    },
 }
+TARGET_FILE_EXTENSIONS = {target: profile["extension"] for target, profile in TARGET_PROFILES.items()}
 
 SUPPORTED_TARGETS = [
     "grok",
     "grok-build",
+    "grok-web",
     "claude-ai",
     "claude-code",
     "openai-skills-api",
+    "openai-plugin",
     "chatgpt-work",
     "codex",
 ]
@@ -69,20 +123,34 @@ SUPPORTED_TARGETS = [
 DEFAULT_TARGETS = [
     "grok",
     "grok-build",
+    "grok-web",
     "claude-ai",
     "claude-code",
     "openai-skills-api",
+    "openai-plugin",
     "chatgpt-work",
     "codex",
 ]
 TARGET_DISPLAY_NAMES = {
     "grok": "Grok",
     "grok-build": "Grok Build",
+    "grok-web": "Grok Web",
     "claude-ai": "Claude AI",
     "claude-code": "Claude Code",
     "openai-skills-api": "OpenAI Skills API",
+    "openai-plugin": "OpenAI Plugin",
     "chatgpt-work": "ChatGPT Work",
     "codex": "Codex",
+}
+PUBLISH_MODE_DEPLOYMENT_CLASS = {
+    "manual": "manual_ui",
+    "copy": "local_install",
+    "command": "automated",
+    "openai-skills": "api",
+    "claude-agent": "api",
+    "claude-skills": "local_install",
+    "codex-skills": "local_install",
+    "grok-skills": "local_install",
 }
 DEFAULT_PUBLISH_CONFIG_FILENAMES = ("publish-config.json",)
 
@@ -272,6 +340,10 @@ class PublishResult:
     backup_path: Path | None = None
     had_existing_destination: bool = False
     rollback_command: list[str] | None = None
+
+    @property
+    def deployment_class(self) -> str:
+        return PUBLISH_MODE_DEPLOYMENT_CLASS.get(self.mode, "automated")
 
 
 def color_output_enabled() -> bool:
@@ -931,11 +1003,14 @@ def render_family_target_text(family: Family, skills: list[Skill], target: str) 
 
 
 def render_target_readme(family: Family, skills: list[Skill], target: str) -> str:
-    ext = TARGET_FILE_EXTENSIONS[target]
+    profile = TARGET_PROFILES[target]
+    ext = profile["extension"]
     lines = [
         f"# {family.name} - {target}",
         "",
         "This directory is the generated target-specific view of the family.",
+        "",
+        f"Artifact contract: {profile['artifact_contract']}",
         "",
         "Editing rule:",
         "",
@@ -944,8 +1019,8 @@ def render_target_readme(family: Family, skills: list[Skill], target: str) -> st
         "",
         "Files in this directory:",
         "",
-        f"- `family{ext}` is the aggregated target-specific family text.",
-        f"- `*.{ext.lstrip('.')}` files are the per-skill target-specific text used for this tool.",
+        f"- `family{ext}` is the {profile['family_bundle_label']}.",
+        f"- `*.{ext.lstrip('.')}` files are the {profile['per_skill_label']}.",
         "- `manifest.json` records the generated bundle metadata.",
         "",
         "Skills:",
@@ -957,6 +1032,7 @@ def render_target_readme(family: Family, skills: list[Skill], target: str) -> st
 
 
 def build_manifest_payload(family: Family, skills: list[Skill], target: str) -> dict:
+    profile = TARGET_PROFILES[target]
     return {
         "skill_family": {
             "name": family.name,
@@ -964,7 +1040,8 @@ def build_manifest_payload(family: Family, skills: list[Skill], target: str) -> 
             "version": family.version,
         },
         "target": target,
-        "extension": TARGET_FILE_EXTENSIONS[target],
+        "extension": profile["extension"],
+        "artifact_contract": profile["artifact_contract"],
         "skills": [
             {
                 "id": skill.skill_id,
@@ -1000,10 +1077,18 @@ def render_target_bundle(output_root: Path, family: Family, skills: list[Skill],
     write_text(bundle_dir / f"family{ext}", render_family_target_text(family, target_skills, target))
     for skill in target_skills:
         write_text(bundle_dir / f"{skill.skill_id}{ext}", render_target_skill_text(family, skill, target))
+    if target == "grok-web":
+        build_grok_web_upload_bundles(bundle_dir, family, target_skills, target)
+        write_text(bundle_dir / "INSTALL.md", render_grok_web_install_guide(family, target_skills))
     if target == "chatgpt-work":
+        build_chatgpt_work_upload_bundles(bundle_dir, family, target_skills, target)
         write_text(bundle_dir / "INSTALL.md", render_chatgpt_work_install_guide(family, target_skills))
     if target == "claude-ai":
+        build_claude_ai_upload_bundles(bundle_dir, family, target_skills, target)
         write_text(bundle_dir / "INSTALL.md", render_claude_ai_install_guide(family, target_skills))
+    if target == "openai-plugin":
+        build_openai_plugin_package(bundle_dir, family, target_skills)
+        write_text(bundle_dir / "INSTALL.md", render_openai_plugin_install_guide(family, target_skills))
 
     return bundle_dir
 
@@ -1178,7 +1263,7 @@ def preflight_publish_target(
 
     mode = config.mode
     if mode == "manual":
-        return mode, "manual handoff bundle"
+        return mode, "manual_ui | manual handoff bundle"
 
     if mode == "copy":
         install_root = resolve_install_root(target, install_paths, config)
@@ -1189,7 +1274,7 @@ def preflight_publish_target(
                 f"Use --install-path {target}=/path, set {env_name}, or define install_root in publish-config.json."
             )
         ensure_writable_directory(install_root, f"{target} install root")
-        return mode, f"install root {install_root}"
+        return mode, f"local_install | install root {install_root}"
 
     if mode == "command":
         if not config.command:
@@ -1197,37 +1282,37 @@ def preflight_publish_target(
         executable = resolve_command_executable(config.command[0])
         if executable is None:
             raise ValidationError(f"{target}: required publish executable not found: {config.command[0]}")
-        return mode, str(executable)
+        return mode, f"automated | {executable}"
 
     if mode == "openai-skills":
         env_name = config.api_key_env or "OPENAI_API_KEY"
         publisher_api_key(target, config, "OPENAI_API_KEY")
-        return mode, f"API key {env_name}"
+        return mode, f"api | API key {env_name}"
 
     if mode == "claude-agent":
         cli_path = config.cli_path or "ant"
         executable = resolve_command_executable(cli_path)
         if executable is None:
             raise ValidationError(f"{target}: required Claude executable not found: {cli_path}")
-        return mode, str(executable)
+        return mode, f"api | {executable}"
 
     if mode == "claude-skills":
         install_roots = resolve_claude_skills_roots(target, install_paths, config)
         for install_root in install_roots:
             ensure_writable_directory(install_root, f"{target} skills root")
-        return mode, f"skills root(s) {format_path_list(install_roots)}"
+        return mode, f"local_install | skills root(s) {format_path_list(install_roots)}"
 
     if mode == "codex-skills":
         install_roots = resolve_codex_skills_roots(install_paths, config)
         for install_root in install_roots:
             ensure_writable_directory(install_root, f"{target} skills root")
-        return mode, f"skills root(s) {format_path_list(install_roots)}"
+        return mode, f"local_install | skills root(s) {format_path_list(install_roots)}"
 
     if mode == "grok-skills":
         install_roots = resolve_grok_skills_roots(target, install_paths, config)
         for install_root in install_roots:
             ensure_writable_directory(install_root, f"{target} skills root")
-        return mode, f"skills root(s) {format_path_list(install_roots)}"
+        return mode, f"local_install | skills root(s) {format_path_list(install_roots)}"
 
     raise ValidationError(f"{target}: unsupported publish mode {mode}")
 
@@ -1372,24 +1457,181 @@ def render_grok_skill_markdown(family: Family, skill: Skill, target: str) -> str
     )
 
 
+def render_chatgpt_skill_markdown(family: Family, skill: Skill, target: str) -> str:
+    return "\n".join(
+        [
+            "---",
+            f"name: {family.name}-{skill.skill_id}",
+            f"description: {skill.description}",
+            "---",
+            strip_leading_h1(get_target_body(skill, target)),
+            "",
+        ]
+    )
+
+
+def build_manual_skill_zip(bundle_dir: Path, archive_name: str, internal_name: str, markdown: str) -> Path:
+    uploads_dir = bundle_dir / "uploads"
+    package_root = uploads_dir / archive_name
+    package_root.mkdir(parents=True, exist_ok=True)
+    payload_path = package_root / internal_name
+    write_text(payload_path, markdown)
+    zip_path = uploads_dir / f"{archive_name}.zip"
+    with zipfile.ZipFile(zip_path, "w", compression=zipfile.ZIP_DEFLATED) as zf:
+        zf.write(payload_path, arcname=f"{archive_name}/{internal_name}")
+    return zip_path
+
+
+def build_chatgpt_work_upload_bundles(bundle_dir: Path, family: Family, skills: list[Skill], target: str) -> list[Path]:
+    zip_paths: list[Path] = []
+    for skill in skills:
+        zip_paths.append(
+            build_manual_skill_zip(
+                bundle_dir,
+                skill.skill_id,
+                "SKILL.md",
+                render_chatgpt_skill_markdown(family, skill, target),
+            )
+        )
+    return zip_paths
+
+
+def build_claude_ai_upload_bundles(bundle_dir: Path, family: Family, skills: list[Skill], target: str) -> list[Path]:
+    zip_paths: list[Path] = []
+    for skill in skills:
+        zip_paths.append(
+            build_manual_skill_zip(
+                bundle_dir,
+                skill.skill_id,
+                "skill.md",
+                render_claude_skill_markdown(family, skill, target),
+            )
+        )
+    return zip_paths
+
+
+def build_grok_web_upload_bundles(bundle_dir: Path, family: Family, skills: list[Skill], target: str) -> list[Path]:
+    zip_paths: list[Path] = []
+    for skill in skills:
+        zip_paths.append(
+            build_manual_skill_zip(
+                bundle_dir,
+                skill.skill_id,
+                "SKILL.md",
+                render_grok_skill_markdown(family, skill, target),
+            )
+        )
+    return zip_paths
+
+
+def build_openai_plugin_package(bundle_dir: Path, family: Family, skills: list[Skill]) -> Path:
+    plugin_root = bundle_dir / "plugin"
+    manifest_root = plugin_root / ".codex-plugin"
+    skills_root = plugin_root / "skills"
+    manifest_root.mkdir(parents=True, exist_ok=True)
+    skills_root.mkdir(parents=True, exist_ok=True)
+
+    plugin_manifest = {
+        "name": family.name,
+        "version": family.version,
+        "description": family.description,
+        "skills": "./skills/",
+        "interface": {
+            "displayName": family.name,
+            "shortDescription": family.description,
+            "longDescription": family.description,
+            "developerName": "skill-tooling",
+            "category": "Productivity",
+            "capabilities": ["Skills"],
+            "defaultPrompt": [f"Use the {family.name} plugin skills"],
+            "screenshots": [],
+        },
+    }
+    write_json(manifest_root / "plugin.json", plugin_manifest)
+
+    for skill in skills:
+        skill_root = skills_root / skill.skill_id
+        skill_root.mkdir(parents=True, exist_ok=True)
+        write_text(skill_root / "SKILL.md", render_chatgpt_skill_markdown(family, skill, "openai-skills-api"))
+
+    zip_path = bundle_dir / f"{family.name}-plugin.zip"
+    with zipfile.ZipFile(zip_path, "w", compression=zipfile.ZIP_DEFLATED) as zf:
+        for path in sorted(plugin_root.rglob("*")):
+            if path.is_file():
+                zf.write(path, arcname=str(path.relative_to(plugin_root)))
+    return zip_path
+
+
 def render_chatgpt_work_install_guide(family: Family, skills: list[Skill]) -> str:
     lines = [
         f"# ChatGPT Work Manual Build - {family.name}",
         "",
         "This target does not have a built-in API publisher in `skill-tooling`.",
-        "Use the generated `.prompt` files in this directory to create ChatGPT Work skills manually.",
+        "Use the generated upload bundles in `uploads/` to create ChatGPT Work skills manually.",
         "",
         "Recommended flow:",
         "",
         "1. Open the ChatGPT Work Skills screen.",
-        "2. Create one ChatGPT skill per generated `.prompt` file.",
-        "3. Paste the matching prompt content and save the skill.",
+        "2. Upload one generated `.zip` bundle per skill when the UI supports upload, or open the matching bundle directory and copy from `SKILL.md`.",
+        "3. Save and publish the skill in the workspace UI.",
         "",
         "Generated skills:",
         "",
     ]
     for skill in skills:
-        lines.append(f"- `{skill.skill_id}.prompt`")
+        lines.append(f"- `uploads/{skill.skill_id}.zip`")
+        lines.append(f"- `uploads/{skill.skill_id}/SKILL.md`")
+    lines.append("")
+    return "\n".join(lines)
+
+
+def render_grok_web_install_guide(family: Family, skills: list[Skill]) -> str:
+    lines = [
+        f"# Grok Web Manual Build - {family.name}",
+        "",
+        "This target does not have a built-in web publisher in `skill-tooling`.",
+        "Use the generated upload bundles in `uploads/` to create or share Grok skills manually on grok.com or in supported apps.",
+        "",
+        "Recommended flow:",
+        "",
+        "1. Open Grok Skills on the web or supported mobile app.",
+        "2. Upload one generated `.zip` bundle per skill when the UI supports upload, or open the matching bundle directory and copy from `SKILL.md`.",
+        "3. Save and share the skill from the Grok Skills UI.",
+        "",
+        "Generated skills:",
+        "",
+    ]
+    for skill in skills:
+        lines.append(f"- `uploads/{skill.skill_id}.zip`")
+        lines.append(f"- `uploads/{skill.skill_id}/SKILL.md`")
+    lines.append("")
+    return "\n".join(lines)
+
+
+def render_openai_plugin_install_guide(family: Family, skills: list[Skill]) -> str:
+    lines = [
+        f"# OpenAI Plugin Package - {family.name}",
+        "",
+        "This target prepares an OpenAI plugin package for manual workspace distribution.",
+        "Use the generated plugin bundle to upload, import, or register the plugin in the ChatGPT / Codex workspace surface when that admin flow is available.",
+        "",
+        "Artifacts:",
+        "",
+        f"- `{family.name}-plugin.zip`",
+        "- `plugin/.codex-plugin/plugin.json`",
+        "- `plugin/skills/<skill>/SKILL.md`",
+        "",
+        "Recommended flow:",
+        "",
+        "1. Open the Plugin directory or workspace plugin administration surface.",
+        "2. Upload or import the generated plugin package if your workspace surface supports it.",
+        "3. Verify the packaged skills are available to the intended workspace roles.",
+        "",
+        "Packaged skills:",
+        "",
+    ]
+    for skill in skills:
+        lines.append(f"- `plugin/skills/{skill.skill_id}/SKILL.md`")
     lines.append("")
     return "\n".join(lines)
 
@@ -1399,7 +1641,7 @@ def render_claude_ai_install_guide(family: Family, skills: list[Skill]) -> str:
         f"# Claude AI Manual Build - {family.name}",
         "",
         "This target does not have a built-in cloud publisher in `skill-tooling`.",
-        "Use the generated `.skill` files in this directory to create or import Claude skills manually in Claude Desktop or claude.ai.",
+        "Use the generated upload bundles in `uploads/` to create or import Claude skills manually in Claude Desktop or claude.ai.",
         "",
         "Important:",
         "",
@@ -1408,14 +1650,15 @@ def render_claude_ai_install_guide(family: Family, skills: list[Skill]) -> str:
         "Recommended flow:",
         "",
         "1. Open Claude Desktop or claude.ai and go to the Skills interface.",
-        "2. Create or import one Claude skill per generated `.skill` file.",
-        "3. Use `family.skill` only as a family-level reference, not as a replacement for the per-skill files.",
+        "2. Upload one generated `.zip` bundle per skill when the UI supports upload, or open the matching bundle directory and import/copy from `skill.md`.",
+        "3. Use `family.skill` only as a family-level reference, not as a replacement for the per-skill upload bundles.",
         "",
         "Generated skills:",
         "",
     ]
     for skill in skills:
-        lines.append(f"- `{skill.skill_id}.skill`")
+        lines.append(f"- `uploads/{skill.skill_id}.zip`")
+        lines.append(f"- `uploads/{skill.skill_id}/skill.md`")
     lines.append("")
     return "\n".join(lines)
 
@@ -1436,15 +1679,29 @@ def publish_manual_bundle(bundle_dir: Path, target: str) -> PublishResult:
 def manual_follow_up_message(target: str, result: PublishResult) -> str | None:
     if result.mode != "manual":
         return None
+    if target == "grok-web":
+        return (
+            "Manual next step required: open Grok Skills on grok.com or a supported Grok app, upload one generated "
+            "bundle from `uploads/*.zip` per skill when supported or copy from `uploads/*/SKILL.md`, "
+            f"and follow {result.destination}."
+        )
     if target == "chatgpt-work":
         return (
-            "Manual next step required: open ChatGPT Work, create one skill per generated `.prompt` file, "
+            "Manual next step required: open ChatGPT Work, upload one generated bundle from `uploads/*.zip` per skill "
+            "when supported or copy from `uploads/*/SKILL.md`, "
             f"and follow {result.destination}."
+        )
+    if target == "openai-plugin":
+        return (
+            "Manual next step required: open the ChatGPT / Codex plugin administration surface, upload or import "
+            "the generated `*-plugin.zip` bundle if supported or use the generated `plugin/` "
+            f"directory, and follow {result.destination}."
         )
     if target == "claude-ai":
         return (
-            "Manual next step required: open Claude Desktop or claude.ai, create or import one skill per generated "
-            f"`.skill` file, and follow {result.destination}."
+            "Manual next step required: open Claude Desktop or claude.ai, upload one generated bundle from "
+            "`uploads/*.zip` per skill when supported or import/copy from `uploads/*/skill.md`, "
+            f"and follow {result.destination}."
         )
     return f"Manual next step required: complete installation using the generated bundle at {result.bundle_dir}."
 
@@ -2011,6 +2268,7 @@ def publish_result_to_dict(result: PublishResult) -> dict:
     return {
         "target": result.target,
         "mode": result.mode,
+        "deployment_class": result.deployment_class,
         "bundle_dir": str(result.bundle_dir),
         "destination": str(result.destination) if result.destination else None,
         "publish_result": result.publish_result,
@@ -2201,9 +2459,11 @@ def create_family_repo(args: argparse.Namespace) -> int:
             f"    {orchestrator_id}.md",
             "  dist/",
             "    grok/",
+            "    grok-web/",
             "    claude-ai/",
             "    claude-code/",
             "    openai-skills-api/",
+            "    openai-plugin/",
             "    chatgpt-work/",
             "    codex/",
             "```",
@@ -2334,6 +2594,8 @@ def deploy_family_repo(args: argparse.Namespace) -> int:
 
         receipt_targets: list[dict] = []
         manual_follow_up_targets: list[tuple[str, list[str]]] = []
+        automated_targets: list[str] = []
+        prepared_targets: list[str] = []
 
         for target in selected_targets:
             bundle_dir = render_target_bundle(output_root, family, skills, target)
@@ -2352,7 +2614,12 @@ def deploy_family_repo(args: argparse.Namespace) -> int:
                     skills,
                 )
                 receipt_targets.append(publish_result_to_dict(result))
-                print(f"  Deployed to {TARGET_DISPLAY_NAMES.get(target, target)}: {result.publish_result}")
+                if result.deployment_class == "manual_ui":
+                    prepared_targets.append(target)
+                    print(f"  Prepared for {TARGET_DISPLAY_NAMES.get(target, target)}: {result.publish_result}")
+                else:
+                    automated_targets.append(target)
+                    print(f"  Deployed to {TARGET_DISPLAY_NAMES.get(target, target)}: {result.publish_result}")
                 print(f"  Verified {target}: {result.verification_result}")
                 follow_up_lines = manual_follow_up_lines(target, result)
                 if follow_up_lines:
@@ -2373,7 +2640,10 @@ def deploy_family_repo(args: argparse.Namespace) -> int:
                 )
 
         if publish_requested:
-            print(f"Published targets: {', '.join(selected_targets)}")
+            if automated_targets:
+                print(f"Published targets: {', '.join(automated_targets)}")
+            if prepared_targets:
+                print(f"Prepared manual targets: {', '.join(prepared_targets)}")
             if manual_follow_up_targets:
                 print("")
                 summary_title = "MANUAL FOLLOW-UP SUMMARY"
