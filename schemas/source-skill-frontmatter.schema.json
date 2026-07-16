@@ -1,0 +1,20 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://example.com/skill-tooling/source-skill-frontmatter.schema.json",
+  "title": "Skill Tooling Source Skill Frontmatter",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["description"],
+  "properties": {
+    "name": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Optional human-facing skill name."
+    },
+    "description": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Required skill description."
+    }
+  }
+}

@@ -16,6 +16,7 @@ unset SKILL_TOOLING_GROK_BUILD_INSTALL_ROOT
 unset SKILL_TOOLING_CLAUDE_INSTALL_ROOT
 unset SKILL_TOOLING_CLAUDE_CODE_INSTALL_ROOT
 unset SKILL_TOOLING_OPENAI_SKILLS_API_INSTALL_ROOT
+unset SKILL_TOOLING_CHATGPT_WORK_INSTALL_ROOT
 unset SKILL_TOOLING_CODEX_INSTALL_ROOT
 
 FAMILY_NAME="customer-support"
@@ -29,6 +30,8 @@ CODEX_HOME_ROOT="$TMP_DIR/codex-home"
 CODEX_DEFAULT_HOME="$TMP_DIR/default-home"
 CLAUDE_CONFIG_FILE="$TMP_DIR/claude-publish-config.json"
 CLAUDE_CONFIG_ROOT="$TMP_DIR/claude-home"
+CODEX_HISTORY_DIR="$TMP_DIR/codex-history"
+CLAUDE_HISTORY_DIR="$TMP_DIR/claude-history"
 
 "$REPO_ROOT/scripts/create-family" "$FAMILY_NAME" "Reusable support skills" --path "$TMP_DIR"
 "$REPO_ROOT/scripts/validate-family" --source "$FAMILY_DIR"
@@ -60,6 +63,7 @@ cat > "$TMP_CONFIG_FILE" <<EOF
     "claude": { "mode": "copy", "install_root": "$PUBLISH_ROOT/claude" },
     "claude-code": { "mode": "copy", "install_root": "$PUBLISH_ROOT/claude-code" },
     "openai-skills-api": { "mode": "copy", "install_root": "$PUBLISH_ROOT/openai-skills-api" },
+    "chatgpt-work": { "mode": "manual" },
     "codex": { "mode": "copy", "install_root": "$PUBLISH_ROOT/codex" }
   }
 }
@@ -101,9 +105,17 @@ git -C "$FAMILY_DIR" add .
 git -C "$FAMILY_DIR" commit -q -m "Initial family"
 
 "$REPO_ROOT/scripts/skill-deploy" --repo "$FAMILY_DIR" --publish --config "$TMP_CONFIG_FILE" --history-dir "$HISTORY_DIR"
-SKILL_TOOLING_ENV_FILE="$TMP_DIR/family.env" "$REPO_ROOT/scripts/skill-deploy" --source "$FAMILY_DIR" --publish --target codex --config "$CODEX_CONFIG_FILE" --history-dir "$TMP_DIR/codex-history"
+mkdir -p "$CODEX_HOME_ROOT/skills/${FAMILY_NAME}--orchestrator"
+cat > "$CODEX_HOME_ROOT/skills/${FAMILY_NAME}--orchestrator/SKILL.md" <<EOF
+legacy codex skill
+EOF
+SKILL_TOOLING_ENV_FILE="$TMP_DIR/family.env" "$REPO_ROOT/scripts/skill-deploy" --source "$FAMILY_DIR" --publish --target codex --config "$CODEX_CONFIG_FILE" --history-dir "$CODEX_HISTORY_DIR"
 HOME="$CODEX_DEFAULT_HOME" CODEX_HOME="" SKILL_TOOLING_CODEX_INSTALL_ROOT="" "$REPO_ROOT/scripts/skill-deploy" --source "$FAMILY_DIR" --publish --target codex --config "$CODEX_DEFAULT_CONFIG_FILE" --history-dir "$TMP_DIR/codex-default-history"
-CLAUDE_CONFIG_DIR="$CLAUDE_CONFIG_ROOT" "$REPO_ROOT/scripts/skill-deploy" --source "$FAMILY_DIR" --publish --target claude --config "$CLAUDE_CONFIG_FILE" --history-dir "$TMP_DIR/claude-history"
+mkdir -p "$CLAUDE_CONFIG_ROOT/skills/${FAMILY_NAME}--orchestrator"
+cat > "$CLAUDE_CONFIG_ROOT/skills/${FAMILY_NAME}--orchestrator/SKILL.md" <<EOF
+legacy claude skill
+EOF
+CLAUDE_CONFIG_DIR="$CLAUDE_CONFIG_ROOT" "$REPO_ROOT/scripts/skill-deploy" --source "$FAMILY_DIR" --publish --target claude --config "$CLAUDE_CONFIG_FILE" --history-dir "$CLAUDE_HISTORY_DIR"
 printf '\n<!-- release smoke -->\n' >> "$FAMILY_DIR/source/orchestrator.md"
 "$REPO_ROOT/scripts/skill-deploy" --source "$FAMILY_DIR" --target codex --git --branch codex/release-smoke --commit-message "Release family" --history-dir "$TMP_DIR/release-history"
 
@@ -124,25 +136,25 @@ grep -q "required publish executable not found" "$TMP_DIR/missing-command.stderr
 
 test -f "$FAMILY_DIR/family.json"
 test -f "$FAMILY_DIR/source/orchestrator.md"
-test -f "$FAMILY_DIR/overrides/orchestrator/claude.md"
 test -f "$REPO_ROOT/pyproject.toml"
 test -f "$REPO_ROOT/poetry.lock"
 test -f "$REPO_ROOT/examples/.env.example"
 test -f "$REPO_ROOT/publish-config.json"
 find "$FAMILY_DIR/.skill-tooling/deployments/receipts" -name '*.json' | grep -q .
 
-test -f "$FAMILY_DIR/grok/README.md"
-test -f "$FAMILY_DIR/grok/manifest.json"
-test -f "$FAMILY_DIR/grok/family.grok"
-test -f "$FAMILY_DIR/grok/orchestrator.grok"
+test -f "$FAMILY_DIR/dist/grok/README.md"
+test -f "$FAMILY_DIR/dist/grok/manifest.json"
+test -f "$FAMILY_DIR/dist/grok/family.grok"
+test -f "$FAMILY_DIR/dist/grok/orchestrator.grok"
 
-test -f "$FAMILY_DIR/claude/README.md"
-test -f "$FAMILY_DIR/claude/family.skill"
-test -f "$FAMILY_DIR/claude/orchestrator.skill"
-grep -q "Claude-specific" "$FAMILY_DIR/claude/orchestrator.skill"
+test -f "$FAMILY_DIR/dist/claude/README.md"
+test -f "$FAMILY_DIR/dist/claude/family.skill"
+test -f "$FAMILY_DIR/dist/claude/orchestrator.skill"
+grep -q "Coordinate the ${FAMILY_NAME} family" "$FAMILY_DIR/dist/claude/orchestrator.skill"
 
-test -f "$FAMILY_DIR/codex/family.prompt"
-test -f "$FAMILY_DIR/openai-skills-api/orchestrator.prompt"
+test -f "$FAMILY_DIR/dist/codex/family.prompt"
+test -f "$FAMILY_DIR/dist/openai-skills-api/orchestrator.prompt"
+test -f "$FAMILY_DIR/dist/chatgpt-work/INSTALL.md"
 test -f "$CODEX_HOME_ROOT/skills/${FAMILY_NAME}--orchestrator/SKILL.md"
 grep -q "name: \"${FAMILY_NAME}--orchestrator\"" "$CODEX_HOME_ROOT/skills/${FAMILY_NAME}--orchestrator/SKILL.md"
 test -f "$CODEX_DEFAULT_HOME/.agents/skills/${FAMILY_NAME}--orchestrator/SKILL.md"
@@ -161,5 +173,15 @@ test -n "$RECEIPT_PATH"
 "$REPO_ROOT/scripts/rollback-deploy" --receipt "$RECEIPT_PATH"
 test ! -e "$PUBLISH_ROOT/grok/$FAMILY_NAME"
 test ! -e "$PUBLISH_ROOT/codex/$FAMILY_NAME"
+
+CODEX_RECEIPT_PATH=$(find "$CODEX_HISTORY_DIR/receipts" -name '*.json' | head -n 1)
+test -n "$CODEX_RECEIPT_PATH"
+"$REPO_ROOT/scripts/rollback-deploy" --receipt "$CODEX_RECEIPT_PATH"
+grep -q "legacy codex skill" "$CODEX_HOME_ROOT/skills/${FAMILY_NAME}--orchestrator/SKILL.md"
+
+CLAUDE_RECEIPT_PATH=$(find "$CLAUDE_HISTORY_DIR/receipts" -name '*.json' | head -n 1)
+test -n "$CLAUDE_RECEIPT_PATH"
+"$REPO_ROOT/scripts/rollback-deploy" --receipt "$CLAUDE_RECEIPT_PATH"
+grep -q "legacy claude skill" "$CLAUDE_CONFIG_ROOT/skills/${FAMILY_NAME}--orchestrator/SKILL.md"
 
 echo "Smoke test passed."

@@ -1,0 +1,230 @@
+# Status And Plan
+
+This document records the current state of `skill-tooling`, the intended target state, the gaps between them, and the current work plan. It is written against the code and family-repo contract in the working tree as of July 16, 2026.
+
+## Current State
+
+### Tooling Repo
+
+`skill-tooling` is a local Python CLI with shell entrypoints.
+
+It currently provides:
+
+- `scripts/create-family`
+- `scripts/validate-family`
+- `scripts/skill-deploy`
+- `scripts/rollback-deploy`
+
+The current family-repo contract is:
+
+```text
+family-repo/
+  family.json
+  source/
+    <skill>.md
+  dist/
+    <target>/
+```
+
+Authored source lives only in `source/`.
+Generated deployable artifacts live only in `dist/<target>/`.
+There is no authored per-target override layer in the contract.
+
+### Supported Targets
+
+Current target ids:
+
+- `grok`
+- `grok-build`
+- `claude`
+- `claude-code`
+- `openai-skills-api`
+- `chatgpt-work`
+- `codex`
+
+Current target behavior:
+
+- `openai-skills-api`: hosted API publisher
+- `chatgpt-work`: manual handoff bundle only
+- `claude`: local Claude skill install
+- `claude-code`: local Claude skill install
+- `codex`: local Codex skill install
+- `grok`: wrapper-command stub
+- `grok-build`: wrapper-command stub
+
+### FH-Coaches
+
+`FH-Coaches` now matches the current family-repo shape:
+
+```text
+FH-Coaches/
+  family.json
+  source/
+  dist/
+    grok/
+    grok-build/
+    claude/
+    claude-code/
+    openai-skills-api/
+    chatgpt-work/
+    codex/
+```
+
+Its ChatGPT Work manual artifact path is:
+
+```text
+dist/chatgpt-work/
+```
+
+Start with:
+
+```text
+dist/chatgpt-work/INSTALL.md
+```
+
+## Target State
+
+The intended product state is:
+
+- one create command to start a family repo
+- one deploy command to validate, build, and publish
+- one canonical source per skill
+- one generated deployable form per target
+- no server or background control plane
+- a truthful target map where every listed target is either:
+  - fully supported
+  - explicitly manual
+  - explicitly stubbed / not yet implemented
+
+The intended deployment outcome is:
+
+- a family author can run `skill-deploy --source . --publish`
+- the command publishes every target in `family.json`
+- the result is deterministic and auditable
+
+## Gaps Vs Target State
+
+### Product Gaps
+
+1. `grok` and `grok-build` are still stubs.
+   They require local wrapper executables and do not have first-party publishers.
+
+2. `chatgpt-work` is manual only.
+   `skill-tooling` builds the correct manual deployable bundle, but it does not automatically install into the ChatGPT Work UI.
+
+3. The OpenAI/ChatGPT split is still incomplete.
+   `openai-skills-api` is a real documented API surface.
+   `chatgpt-work` is a real product surface.
+   A documented API bridge between them has not been established.
+
+4. There is no documented ChatGPT Work creation API in this repo yet.
+   The documented adjacent OpenAI surfaces currently cover hosted OpenAI Skills and triggering existing workspace agents, not creating ChatGPT Work skills.
+
+### Workflow Gaps
+
+1. Plain `--publish` only works if every target in the manifest is actually deployable in the current environment.
+   This means family repos that list `grok` or `grok-build` still fail preflight on machines without those wrappers.
+
+2. Rollback is incomplete for built-in API publishers.
+   Copy-mode rollback works.
+   Local Claude/Codex skill installs now roll back.
+   API rollback for hosted publishers is still not implemented.
+
+3. Source frontmatter is standardized, but intentionally narrow.
+   It now has a formal schema, but only supports the small metadata surface this project currently needs.
+
+4. Generated target artifacts are structurally correct but not yet proven vendor-native for every target.
+   For some targets they are still “our deployable representation,” not a vendor-defined package format.
+
+### Documentation Gaps
+
+1. The repo has multiple state docs and they can drift.
+   `README.md`, `docs/project-state.md`, `docs/deployment-matrix.md`, and the family contract doc need to stay aligned.
+
+2. The exact meaning of “supported” versus “manual” versus “stub” needs to stay explicit.
+   This is especially important for `chatgpt-work`, `grok`, and `grok-build`.
+
+### FH-Coaches Gaps
+
+1. `FH-Coaches/family.json` still lists `grok` and `grok-build`.
+   That is structurally valid, but operationally it prevents a clean plain `--publish` in your current environment.
+
+2. `FH-Coaches` includes generated Grok and Grok Build output in `dist/`, but those are not backed by first-party publishers yet.
+
+3. `FH-Coaches` has a few incidental local artifacts like `.DS_Store`.
+   They are not part of the contract.
+
+## WIP
+
+Current in-progress changes in the working tree:
+
+- removed the non-required `overrides/` concept from the contract and code
+- migrated generated family outputs from root-level target folders to `dist/<target>/`
+- added `chatgpt-work` as a standard generated manual deployable target
+- migrated `FH-Coaches` to the new contract
+
+These changes are implemented locally and smoke-tested, but they are not yet documented as a committed, merged release.
+
+## Prioritized Work Plan
+
+### P0
+
+1. Normalize manifests for real current environments.
+   Remove `grok` and `grok-build` from family manifests that are meant to publish successfully today, starting with `FH-Coaches`, unless the wrappers are intentionally installed and supported.
+
+2. Commit and merge the contract cleanup.
+   The repo should not keep drifting between root-level generated folders, `dist/`, and the removed `overrides/` concept.
+
+3. Keep the OpenAI target map honest.
+   `openai-skills-api` is real.
+   `chatgpt-work` is manual.
+   No undocumented ChatGPT Work publisher should be added.
+
+### P1
+
+1. Implement rollback for built-in API publishers.
+   `openai-skills` and `claude-agent` still persist state without rollback handlers.
+
+2. Make target status explicit in CLI output and docs.
+   The user should not have to infer whether a target is real, manual, or stubbed.
+
+### P2
+
+1. Build first-party Grok publisher support.
+   If no official API/CLI exists, keep it explicitly stubbed and avoid pretending it is near-complete.
+
+2. Evaluate whether `chatgpt-work` can ever be automated through a documented API.
+   If not, leave it permanently manual and document that clearly.
+
+3. Add packaging or GitHub Action support for turnkey use from family repos.
+
+## Workflow Status
+
+| Workflow Step | Current Status |
+|---|---|
+| Create family repo | Real tooling |
+| Author canonical source skills in `source/` | Real tooling |
+| Validate `family.json` | Real tooling |
+| Validate source skill frontmatter (`name`, `description`) | Real tooling |
+| Generate deployable artifacts in `dist/<target>/` | Real tooling |
+| Generate ChatGPT Work manual upload bundle | Real tooling |
+| Publish `openai-skills-api` | Real tooling |
+| Publish `chatgpt-work` automatically | Manual only |
+| Publish `claude` | Real tooling |
+| Publish `claude-code` | Real tooling |
+| Publish `codex` | Real tooling |
+| Publish `grok` | Stub only |
+| Publish `grok-build` | Stub only |
+| Publish all targets in manifest with one command | Partial |
+| Git stage/commit/push/PR/merge from deploy | Real tooling |
+| Roll back copy publishes | Real tooling |
+| Roll back built-in API publishes | Not implemented |
+| Roll back built-in local-skill publishes | Real tooling |
+
+## Recommendation
+
+The highest-value next move is to make the target list truthful in practice, not just in documentation:
+
+1. commit and merge the `dist/` plus no-`overrides/` contract cleanup
+2. remove unsupported Grok targets from `FH-Coaches` if you want plain `--publish` to succeed now
+3. keep `openai-skills-api` and `chatgpt-work` explicitly separated until a documented creation API exists

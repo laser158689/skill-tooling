@@ -28,8 +28,7 @@ poetry install
 - `skill-tooling` is the shared tooling repo.
 - Each skill family lives in its own repo.
 - `source/` contains the canonical authored skills.
-- Top-level tool folders like `grok/`, `claude/`, and `codex/` are generated outputs.
-- `overrides/` is optional and only used when one tool needs different text for a specific skill.
+- `dist/<target>/` contains the generated deployable outputs.
 
 ## Family Repository Contract
 
@@ -41,22 +40,26 @@ my-family/
   source/
     orchestrator.md
     researcher.md
-  overrides/
-    orchestrator/
-      claude.md
-  grok/
-  claude/
-  codex/
+  dist/
+    grok/
+    claude/
+    openai-skills-api/
+    chatgpt-work/
+    codex/
 ```
 
 The important ownership rule is simple:
 
 - Humans edit `source/*.md`
-- Humans optionally edit `overrides/<skill-id>/<target>.md`
-- `skill-tooling` rewrites the top-level tool directories
+- `skill-tooling` rewrites `dist/<target>/`
 
 The manifest filename is always `family.json`.
 This repo does not use repo-specific manifest filenames like `FH-Coaches.yml`.
+
+Source skill note:
+- `source/*.md` uses a small standardized YAML frontmatter block.
+- Supported frontmatter keys are `name` and `description`.
+- Per-skill `targets` are not part of the source contract; targets are defined at the family level in `family.json`.
 
 Target migration note:
 - `openai-chatgpt` has been renamed to `openai-skills-api`.
@@ -64,8 +67,10 @@ Target migration note:
 
 See [docs/family-repo-contract.md](docs/family-repo-contract.md) for the full contract.
 The family manifest schema is documented in [docs/family-schema.md](docs/family-schema.md) and published as [schemas/family.schema.json](schemas/family.schema.json).
+A machine-readable schema for source skill frontmatter is published as [schemas/source-skill-frontmatter.schema.json](schemas/source-skill-frontmatter.schema.json).
 A project-level status and architecture summary lives in [docs/project-state.md](docs/project-state.md).
 The current deployment workflow is summarized in [docs/deployment-matrix.md](docs/deployment-matrix.md).
+A consolidated current-state, gaps, and work-plan document lives in [docs/status-and-plan.md](docs/status-and-plan.md).
 
 ## Primary Commands
 
@@ -84,7 +89,7 @@ Create a new family repo:
 scripts/create-family customer-support "Reusable support skills for customer support teams" --path /tmp
 ```
 
-Generate tool-specific folders directly inside the family repo:
+Generate tool-specific deployable folders directly inside the family repo:
 
 ```bash
 scripts/skill-deploy --source /tmp/customer-support
@@ -99,7 +104,8 @@ scripts/skill-deploy \
 ```
 
 If you omit `--target`, `--publish` publishes every target listed in `family.json`.
-By default, the CLI looks for `publish-config.json` in the family repo, the current working directory, and then the `skill-tooling` repo.
+By default, the CLI looks for `publish-config.json` in the `skill-tooling` repo.
+Anything else should be an explicit override through `--config` or `SKILL_TOOLING_CONFIG`.
 
 That is the intended operating model:
 
@@ -120,7 +126,7 @@ scripts/skill-deploy \
   --commit-message "Deploy customer-support"
 ```
 
-If you want the generated tool folders somewhere else, override the output root:
+If you want the generated deployable folders somewhere else, override the output root:
 
 ```bash
 scripts/skill-deploy --source /tmp/customer-support --output /tmp/customer-support-build
@@ -165,7 +171,7 @@ Current adapter status:
 - `codex` has a built-in local publisher via `codex-skills`.
 - `claude` and `claude-code` have built-in local publishers via `claude-skills`.
 - `grok` and `grok-build` still depend on local wrapper commands or copy-based/manual flows.
-- Generated target folders remain the manual fallback artifacts for every target.
+- Generated target folders under `dist/` remain the manual fallback artifacts for every target.
 
 ## Credentials And Environment
 
@@ -198,7 +204,7 @@ Starter values are shown in [examples/.env.example](examples/.env.example).
 Typical local setup:
 
 ```bash
-cp examples/.env.example skill-tooling/.env
+cp examples/.env.example .env
 ```
 
 ## Installation Roots
