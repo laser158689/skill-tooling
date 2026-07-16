@@ -32,6 +32,9 @@ CLAUDE_CONFIG_FILE="$TMP_DIR/claude-publish-config.json"
 CLAUDE_CONFIG_ROOT="$TMP_DIR/claude-home"
 CODEX_HISTORY_DIR="$TMP_DIR/codex-history"
 CLAUDE_HISTORY_DIR="$TMP_DIR/claude-history"
+GROK_CONFIG_FILE="$TMP_DIR/grok-publish-config.json"
+GROK_HOME_ROOT="$TMP_DIR/grok-home"
+GROK_HISTORY_DIR="$TMP_DIR/grok-history"
 
 "$REPO_ROOT/scripts/create-family" "$FAMILY_NAME" "Reusable support skills" --path "$TMP_DIR"
 "$REPO_ROOT/scripts/validate-family" --source "$FAMILY_DIR"
@@ -94,6 +97,15 @@ cat > "$CLAUDE_CONFIG_FILE" <<EOF
 }
 EOF
 
+cat > "$GROK_CONFIG_FILE" <<EOF
+{
+  "targets": {
+    "grok": { "mode": "grok-skills", "install_root": "$GROK_HOME_ROOT/skills" },
+    "grok-build": { "mode": "grok-skills", "install_root": "$GROK_HOME_ROOT/skills" }
+  }
+}
+EOF
+
 cat > "$TMP_DIR/family.env" <<EOF
 CODEX_HOME=$CODEX_HOME_ROOT
 EOF
@@ -116,6 +128,11 @@ cat > "$CLAUDE_CONFIG_ROOT/skills/${FAMILY_NAME}--orchestrator/SKILL.md" <<EOF
 legacy claude skill
 EOF
 CLAUDE_CONFIG_DIR="$CLAUDE_CONFIG_ROOT" "$REPO_ROOT/scripts/skill-deploy" --source "$FAMILY_DIR" --publish --target claude --config "$CLAUDE_CONFIG_FILE" --history-dir "$CLAUDE_HISTORY_DIR"
+mkdir -p "$GROK_HOME_ROOT/skills/${FAMILY_NAME}--orchestrator"
+cat > "$GROK_HOME_ROOT/skills/${FAMILY_NAME}--orchestrator/SKILL.md" <<EOF
+legacy grok skill
+EOF
+"$REPO_ROOT/scripts/skill-deploy" --source "$FAMILY_DIR" --publish --target grok --config "$GROK_CONFIG_FILE" --history-dir "$GROK_HISTORY_DIR"
 printf '\n<!-- release smoke -->\n' >> "$FAMILY_DIR/source/orchestrator.md"
 "$REPO_ROOT/scripts/skill-deploy" --source "$FAMILY_DIR" --target codex --git --branch codex/release-smoke --commit-message "Release family" --history-dir "$TMP_DIR/release-history"
 
@@ -161,6 +178,9 @@ test -f "$CODEX_DEFAULT_HOME/.agents/skills/${FAMILY_NAME}--orchestrator/SKILL.m
 grep -q "name: \"${FAMILY_NAME}--orchestrator\"" "$CODEX_DEFAULT_HOME/.agents/skills/${FAMILY_NAME}--orchestrator/SKILL.md"
 test -f "$CLAUDE_CONFIG_ROOT/skills/${FAMILY_NAME}--orchestrator/SKILL.md"
 grep -q "description: Primary orchestrator for the ${FAMILY_NAME} family" "$CLAUDE_CONFIG_ROOT/skills/${FAMILY_NAME}--orchestrator/SKILL.md"
+test -f "$GROK_HOME_ROOT/skills/${FAMILY_NAME}--orchestrator/SKILL.md"
+! grep -q "legacy grok skill" "$GROK_HOME_ROOT/skills/${FAMILY_NAME}--orchestrator/SKILL.md"
+grep -q "Description: Primary orchestrator for the ${FAMILY_NAME} family" "$GROK_HOME_ROOT/skills/${FAMILY_NAME}--orchestrator/SKILL.md"
 
 test -f "$PUBLISH_ROOT/grok/$FAMILY_NAME/orchestrator.grok"
 test -f "$PUBLISH_ROOT/claude/$FAMILY_NAME/orchestrator.skill"
@@ -183,5 +203,10 @@ CLAUDE_RECEIPT_PATH=$(find "$CLAUDE_HISTORY_DIR/receipts" -name '*.json' | head 
 test -n "$CLAUDE_RECEIPT_PATH"
 "$REPO_ROOT/scripts/rollback-deploy" --receipt "$CLAUDE_RECEIPT_PATH"
 grep -q "legacy claude skill" "$CLAUDE_CONFIG_ROOT/skills/${FAMILY_NAME}--orchestrator/SKILL.md"
+
+GROK_RECEIPT_PATH=$(find "$GROK_HISTORY_DIR/receipts" -name '*.json' | head -n 1)
+test -n "$GROK_RECEIPT_PATH"
+"$REPO_ROOT/scripts/rollback-deploy" --receipt "$GROK_RECEIPT_PATH"
+grep -q "legacy grok skill" "$GROK_HOME_ROOT/skills/${FAMILY_NAME}--orchestrator/SKILL.md"
 
 echo "Smoke test passed."

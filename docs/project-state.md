@@ -111,12 +111,13 @@ The current implementation does successfully provide:
 - Repo ingestion via `--repo`
 - Copy-based publishing into install roots
 - Command-based publishing hooks for external wrapper commands
+- Built-in local Grok skill publishing for `grok` and `grok-build`
 - Built-in OpenAI hosted skill publishing for `openai-skills-api`
 - Built-in ChatGPT Work manual-handoff publishing for `chatgpt-work`
 - Built-in local Codex skill publishing for `codex`
 - Built-in local Claude skill publishing for `claude` and `claude-code`
 - Deployment receipts and rollback support for copy-based publishers
-- Rollback support for built-in local skill publishers (`claude-skills`, `codex-skills`)
+- Rollback support for built-in local skill publishers (`grok-skills`, `claude-skills`, `codex-skills`)
 - Formal source skill frontmatter schema validation for `name` and `description`
 - CI smoke coverage for:
   - scaffold
@@ -136,6 +137,7 @@ Runtime assumptions:
 - `git` is available
 - The local machine or CI runner has filesystem access to any copy-publish roots
 - Any `command` publishers refer to locally installed wrapper commands or scripts
+- Grok local skill publishing defaults to `~/.grok/skills`
 - OpenAI hosted publishing requires an API key
 - Claude local skill publishing defaults to `~/.claude/skills` and honors `CLAUDE_CONFIG_DIR`
 - Codex local publishing uses explicit roots when configured; otherwise it defaults to `$HOME/.agents/skills` and updates an existing `$HOME/.codex/skills` legacy/current-session root
@@ -249,7 +251,7 @@ Current state:
 - `chatgpt-work` prepares manual handoff bundles rather than completing a vendor UI flow
 - `codex` can publish local Codex skills into a Codex skills root
 - `claude` and `claude-code` can publish local Claude skills into Claude's documented skills root
-- `grok` and `grok-build` still rely on `command` wrappers or copy/manual flows
+- `grok` and `grok-build` can publish local Grok skills into `~/.grok/skills` or an explicit install root
 
 Issue:
 
@@ -354,7 +356,7 @@ Fix:
 Current state:
 
 - Deploy now writes receipts and supports rollback for copy-based publishers
-- Built-in local skill publishers for Claude and Codex now restore prior local installs during rollback
+- Built-in local skill publishers for Grok, Claude, and Codex now restore prior local installs during rollback
 - Hosted/API publishers still persist state without rollback handlers
 - There is still no full release lifecycle or target-aware version ledger
 
@@ -443,8 +445,7 @@ Fix:
 
 ### Near Term
 
-- Build the next real vendor publishers for Grok, Grok Build, and Claude Code
-- Define target-native output contracts for those targets
+- Define target-native output contracts for Grok, Grok Build, Claude Code, and Codex
 - Add `--dry-run`
 - Improve error reporting per target during publish
 
@@ -463,13 +464,13 @@ This project is no longer just an idea. It now has:
 - A shared family manifest schema
 - A working scaffold/validate/deploy/publish CLI
 - A repo-ingestion path
-- A generated top-level target-folder model
+- A generated `dist/<target>/` deployable model
 
 What it does not yet have is the final layer that makes it production-grade:
 
 - real vendor-native adapters for every listed target
-- real built-in publishers for Grok, Grok Build, Claude Code, and Codex
-- full schema coverage
+- automatic ChatGPT Work publishing
+- hosted/API rollback for OpenAI Skills and Claude agents
 - release and deployment governance
 
 That is the gap between the current state and the intended universal deployer.
