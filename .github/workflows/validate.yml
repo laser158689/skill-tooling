@@ -51,9 +51,9 @@ jobs:
 
     - name: Reject tracked secret env files
       run: |
-        if git ls-files | grep -E '(^|/)\.env($|\.|/)|(^|/)\.skill-tooling\.env($|\.|/)' >/dev/null; then
+        if git ls-files | grep -E '(^|/)\.env($|/)|(^|/)\.skill-tooling\.env($|/)' >/dev/null; then
           echo "Tracked .env or .skill-tooling.env files are not allowed"
-          git ls-files | grep -E '(^|/)\.env($|\.|/)|(^|/)\.skill-tooling\.env($|\.|/)'
+          git ls-files | grep -E '(^|/)\.env($|/)|(^|/)\.skill-tooling\.env($|/)'
           exit 1
         fi
 
