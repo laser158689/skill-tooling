@@ -20,7 +20,8 @@ Using one fixed filename keeps family repos consistent and makes validation and 
   },
   "targets": [
     "grok",
-    "claude",
+    "claude-local",
+    "claude-ai",
     "codex"
   ]
 }

@@ -37,7 +37,8 @@
         "enum": [
           "grok",
           "grok-build",
-          "claude",
+          "claude-local",
+          "claude-ai",
           "claude-code",
           "openai-skills-api",
           "chatgpt-work",

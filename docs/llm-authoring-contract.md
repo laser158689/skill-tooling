@@ -22,7 +22,7 @@ Rules:
 - Treat `dist/` as generated output owned by `skill-tooling`.
 - Do not hand-edit generated files under `dist/` unless the user explicitly asks for generated output surgery.
 - Do not create `overrides/`.
-- Do not create `grok/`, `claude/`, `codex/`, or other root-level generated target folders.
+- Do not create `grok/`, `claude-local/`, `claude-ai/`, `codex/`, or other root-level generated target folders.
 
 ## Required Manifest File
 
@@ -51,7 +51,8 @@ Minimum valid shape:
   "targets": [
     "grok",
     "grok-build",
-    "claude",
+    "claude-local",
+    "claude-ai",
     "claude-code",
     "openai-skills-api",
     "chatgpt-work",

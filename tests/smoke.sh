@@ -13,7 +13,8 @@ unset SKILL_TOOLING_CONFIG
 unset SKILL_TOOLING_ENV_FILE
 unset SKILL_TOOLING_GROK_INSTALL_ROOT
 unset SKILL_TOOLING_GROK_BUILD_INSTALL_ROOT
-unset SKILL_TOOLING_CLAUDE_INSTALL_ROOT
+unset SKILL_TOOLING_CLAUDE_LOCAL_INSTALL_ROOT
+unset SKILL_TOOLING_CLAUDE_AI_INSTALL_ROOT
 unset SKILL_TOOLING_CLAUDE_CODE_INSTALL_ROOT
 unset SKILL_TOOLING_OPENAI_SKILLS_API_INSTALL_ROOT
 unset SKILL_TOOLING_CHATGPT_WORK_INSTALL_ROOT
@@ -63,7 +64,8 @@ cat > "$TMP_CONFIG_FILE" <<EOF
   "targets": {
     "grok": { "mode": "copy", "install_root": "$PUBLISH_ROOT/grok" },
     "grok-build": { "mode": "copy", "install_root": "$PUBLISH_ROOT/grok-build" },
-    "claude": { "mode": "copy", "install_root": "$PUBLISH_ROOT/claude" },
+    "claude-local": { "mode": "copy", "install_root": "$PUBLISH_ROOT/claude-local" },
+    "claude-ai": { "mode": "manual" },
     "claude-code": { "mode": "copy", "install_root": "$PUBLISH_ROOT/claude-code" },
     "openai-skills-api": { "mode": "copy", "install_root": "$PUBLISH_ROOT/openai-skills-api" },
     "chatgpt-work": { "mode": "manual" },
@@ -91,7 +93,8 @@ EOF
 cat > "$CLAUDE_CONFIG_FILE" <<EOF
 {
   "targets": {
-    "claude": { "mode": "claude-skills" },
+    "claude-local": { "mode": "claude-skills" },
+    "claude-ai": { "mode": "manual" },
     "claude-code": { "mode": "claude-skills" }
   }
 }
@@ -127,7 +130,7 @@ mkdir -p "$CLAUDE_CONFIG_ROOT/skills/${FAMILY_NAME}--orchestrator"
 cat > "$CLAUDE_CONFIG_ROOT/skills/${FAMILY_NAME}--orchestrator/SKILL.md" <<EOF
 legacy claude skill
 EOF
-CLAUDE_CONFIG_DIR="$CLAUDE_CONFIG_ROOT" "$REPO_ROOT/scripts/skill-deploy" --source "$FAMILY_DIR" --publish --target claude --config "$CLAUDE_CONFIG_FILE" --history-dir "$CLAUDE_HISTORY_DIR"
+CLAUDE_CONFIG_DIR="$CLAUDE_CONFIG_ROOT" "$REPO_ROOT/scripts/skill-deploy" --source "$FAMILY_DIR" --publish --target claude-local --config "$CLAUDE_CONFIG_FILE" --history-dir "$CLAUDE_HISTORY_DIR"
 mkdir -p "$GROK_HOME_ROOT/skills/${FAMILY_NAME}--orchestrator"
 cat > "$GROK_HOME_ROOT/skills/${FAMILY_NAME}--orchestrator/SKILL.md" <<EOF
 legacy grok skill
@@ -164,10 +167,11 @@ test -f "$FAMILY_DIR/dist/grok/manifest.json"
 test -f "$FAMILY_DIR/dist/grok/family.grok"
 test -f "$FAMILY_DIR/dist/grok/orchestrator.grok"
 
-test -f "$FAMILY_DIR/dist/claude/README.md"
-test -f "$FAMILY_DIR/dist/claude/family.skill"
-test -f "$FAMILY_DIR/dist/claude/orchestrator.skill"
-grep -q "Coordinate the ${FAMILY_NAME} family" "$FAMILY_DIR/dist/claude/orchestrator.skill"
+test -f "$FAMILY_DIR/dist/claude-local/README.md"
+test -f "$FAMILY_DIR/dist/claude-local/family.skill"
+test -f "$FAMILY_DIR/dist/claude-local/orchestrator.skill"
+grep -q "Coordinate the ${FAMILY_NAME} family" "$FAMILY_DIR/dist/claude-local/orchestrator.skill"
+test -f "$FAMILY_DIR/dist/claude-ai/INSTALL.md"
 
 test -f "$FAMILY_DIR/dist/codex/family.prompt"
 test -f "$FAMILY_DIR/dist/openai-skills-api/orchestrator.prompt"
@@ -183,7 +187,7 @@ test -f "$GROK_HOME_ROOT/skills/${FAMILY_NAME}--orchestrator/SKILL.md"
 grep -q "Description: Primary orchestrator for the ${FAMILY_NAME} family" "$GROK_HOME_ROOT/skills/${FAMILY_NAME}--orchestrator/SKILL.md"
 
 test -f "$PUBLISH_ROOT/grok/$FAMILY_NAME/orchestrator.grok"
-test -f "$PUBLISH_ROOT/claude/$FAMILY_NAME/orchestrator.skill"
+test -f "$PUBLISH_ROOT/claude-local/$FAMILY_NAME/orchestrator.skill"
 test -f "$PUBLISH_ROOT/codex/$FAMILY_NAME/family.prompt"
 test "$(git -C "$FAMILY_DIR" branch --show-current)" = "codex/release-smoke"
 test "$(git -C "$FAMILY_DIR" log -1 --pretty=%s)" = "Release family"
