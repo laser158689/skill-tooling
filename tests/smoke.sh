@@ -6,10 +6,22 @@ REPO_ROOT=$(cd "$SCRIPT_DIR/.." && pwd)
 TMP_DIR=$(mktemp -d)
 trap 'rm -rf "$TMP_DIR"' EXIT
 
+unset OPENAI_API_KEY
+unset ANTHROPIC_API_KEY
+unset CODEX_HOME
+unset SKILL_TOOLING_CONFIG
+unset SKILL_TOOLING_ENV_FILE
+unset SKILL_TOOLING_GROK_INSTALL_ROOT
+unset SKILL_TOOLING_GROK_BUILD_INSTALL_ROOT
+unset SKILL_TOOLING_CLAUDE_INSTALL_ROOT
+unset SKILL_TOOLING_CLAUDE_CODE_INSTALL_ROOT
+unset SKILL_TOOLING_OPENAI_CHATGPT_INSTALL_ROOT
+unset SKILL_TOOLING_CODEX_INSTALL_ROOT
+
 FAMILY_NAME="customer-support"
 FAMILY_DIR="$TMP_DIR/$FAMILY_NAME"
 PUBLISH_ROOT="$TMP_DIR/published"
-CONFIG_FILE="$TMP_DIR/publish-config.json"
+CONFIG_FILE="$REPO_ROOT/publish-config.json"
 CODEX_CONFIG_FILE="$TMP_DIR/codex-publish-config.json"
 HISTORY_DIR="$TMP_DIR/history"
 CODEX_HOME_ROOT="$TMP_DIR/codex-home"
@@ -35,7 +47,8 @@ if "$REPO_ROOT/scripts/validate-family" --source "$TMP_DIR/bad-family" > /dev/nu
   exit 1
 fi
 
-cat > "$CONFIG_FILE" <<EOF
+TMP_CONFIG_FILE="$TMP_DIR/publish-config.json"
+cat > "$TMP_CONFIG_FILE" <<EOF
 {
   "targets": {
     "grok": { "mode": "copy", "install_root": "$PUBLISH_ROOT/grok" },
@@ -56,23 +69,43 @@ cat > "$CODEX_CONFIG_FILE" <<EOF
 }
 EOF
 
-cat > "$FAMILY_DIR/.env" <<EOF
+cat > "$TMP_DIR/family.env" <<EOF
 CODEX_HOME=$CODEX_HOME_ROOT
 EOF
 
 git -C "$FAMILY_DIR" init -q
 git -C "$FAMILY_DIR" config user.name "Skill Tooling Test"
 git -C "$FAMILY_DIR" config user.email "skill-tooling@example.com"
-git -C "$FAMILY_DIR" check-ignore .env > /dev/null
 git -C "$FAMILY_DIR" add .
 git -C "$FAMILY_DIR" commit -q -m "Initial family"
 
-"$REPO_ROOT/scripts/skill-deploy" --repo "$FAMILY_DIR" --publish --config "$CONFIG_FILE" --history-dir "$HISTORY_DIR"
-"$REPO_ROOT/scripts/skill-deploy" --source "$FAMILY_DIR" --publish --target codex --config "$CODEX_CONFIG_FILE" --history-dir "$TMP_DIR/codex-history"
+"$REPO_ROOT/scripts/skill-deploy" --repo "$FAMILY_DIR" --publish --config "$TMP_CONFIG_FILE" --history-dir "$HISTORY_DIR"
+SKILL_TOOLING_ENV_FILE="$TMP_DIR/family.env" "$REPO_ROOT/scripts/skill-deploy" --source "$FAMILY_DIR" --publish --target codex --config "$CODEX_CONFIG_FILE" --history-dir "$TMP_DIR/codex-history"
+printf '\n<!-- release smoke -->\n' >> "$FAMILY_DIR/source/orchestrator.md"
+"$REPO_ROOT/scripts/skill-deploy" --source "$FAMILY_DIR" --target codex --git --branch codex/release-smoke --commit-message "Release family" --history-dir "$TMP_DIR/release-history"
+
+cat > "$TMP_DIR/missing-command-config.json" <<EOF
+{
+  "targets": {
+    "grok": { "mode": "command", "command": ["/definitely/missing/publish-grok-skill-family", "{bundle_dir}", "{family_name}"] }
+  }
+}
+EOF
+
+if "$REPO_ROOT/scripts/skill-deploy" --source "$FAMILY_DIR" --publish --target grok --config "$TMP_DIR/missing-command-config.json" >"$TMP_DIR/missing-command.stdout" 2>"$TMP_DIR/missing-command.stderr"; then
+  echo "Expected command publisher failure for missing executable"
+  exit 1
+fi
+grep -q "Publish preflight failed:" "$TMP_DIR/missing-command.stderr"
+grep -q "required publish executable not found" "$TMP_DIR/missing-command.stderr"
 
 test -f "$FAMILY_DIR/family.json"
 test -f "$FAMILY_DIR/source/orchestrator.md"
 test -f "$FAMILY_DIR/overrides/orchestrator/claude.md"
+test -f "$REPO_ROOT/pyproject.toml"
+test -f "$REPO_ROOT/poetry.lock"
+test -f "$REPO_ROOT/examples/.env.example"
+test -f "$REPO_ROOT/publish-config.json"
 find "$FAMILY_DIR/.skill-tooling/deployments/receipts" -name '*.json' | grep -q .
 
 test -f "$FAMILY_DIR/grok/README.md"
@@ -93,6 +126,8 @@ grep -q "name: \"${FAMILY_NAME}--orchestrator\"" "$CODEX_HOME_ROOT/skills/${FAMI
 test -f "$PUBLISH_ROOT/grok/$FAMILY_NAME/orchestrator.grok"
 test -f "$PUBLISH_ROOT/claude/$FAMILY_NAME/orchestrator.skill"
 test -f "$PUBLISH_ROOT/codex/$FAMILY_NAME/family.prompt"
+test "$(git -C "$FAMILY_DIR" branch --show-current)" = "codex/release-smoke"
+test "$(git -C "$FAMILY_DIR" log -1 --pretty=%s)" = "Release family"
 
 RECEIPT_PATH=$(find "$HISTORY_DIR/receipts" -name '*.json' | head -n 1)
 test -n "$RECEIPT_PATH"

@@ -9,6 +9,20 @@ It does two primary things:
 
 Validation is part of deployment. You do not need to run a server or keep background infrastructure running.
 
+## Python Tooling
+
+This repo uses Poetry for Python version and dependency governance.
+
+- `pyproject.toml` is the source of truth for the Python runtime and any future libraries.
+- `poetry.lock` must be committed whenever dependencies change.
+- The current CLI intentionally uses only the Python standard library, so the Poetry setup is minimal today.
+
+If you want a local environment for working on the CLI:
+
+```bash
+poetry install
+```
+
 ## Operating Model
 
 - `skill-tooling` is the shared tooling repo.
@@ -41,6 +55,9 @@ The important ownership rule is simple:
 - Humans optionally edit `overrides/<skill-id>/<target>.md`
 - `skill-tooling` rewrites the top-level tool directories
 
+The manifest filename is always `family.json`.
+This repo does not use repo-specific manifest filenames like `FH-Coaches.yml`.
+
 See [docs/family-repo-contract.md](docs/family-repo-contract.md) for the full contract.
 The family manifest schema is documented in [docs/family-schema.md](docs/family-schema.md) and published as [schemas/family.schema.json](schemas/family.schema.json).
 A project-level status and architecture summary lives in [docs/project-state.md](docs/project-state.md).
@@ -52,6 +69,8 @@ The current deployment workflow is summarized in [docs/deployment-matrix.md](doc
 - `scripts/skill-deploy` validates, generates tool folders, and optionally publishes them.
 
 There is also `scripts/validate-family`, but it is a support command. The intended day-to-day workflow is just `create-family` and `skill-deploy`.
+
+`skill-deploy` can also handle git staging, commit, push, pull-request creation, and merge for local source repos when you pass the explicit git workflow flags.
 
 ## Quick Start
 
@@ -72,9 +91,11 @@ Publish every configured tool from a repo in one command:
 ```bash
 scripts/skill-deploy \
   --repo your-org/customer-support \
-  --publish \
-  --config examples/publish-config.json
+  --publish
 ```
+
+If you omit `--target`, `--publish` publishes every target listed in `family.json`.
+By default, the CLI looks for `publish-config.json` in the family repo, the current working directory, and then the `skill-tooling` repo.
 
 That is the intended operating model:
 
@@ -83,6 +104,17 @@ That is the intended operating model:
 3. Run `skill-deploy` whenever you want validation, generation, and publish.
 
 Every deploy also writes a receipt under `.skill-tooling/deployments/` by default so publish results are auditable and copy-based publishes can be rolled back.
+
+If you want one-command deploy plus git workflow on a local family repo:
+
+```bash
+scripts/skill-deploy \
+  --source /tmp/customer-support \
+  --publish \
+  --git \
+  --branch codex/customer-support-release \
+  --commit-message "Deploy customer-support"
+```
 
 If you want the generated tool folders somewhere else, override the output root:
 
@@ -100,7 +132,8 @@ Publishing is adapter-based.
 - `claude-agent` creates or updates a hosted Claude agent from the generated family bundle.
 - `codex-skills` installs one local Codex skill directory per `source/*.md` skill.
 
-The publish config format is shown in [examples/publish-config.json](examples/publish-config.json).
+The canonical publish config is [publish-config.json](publish-config.json).
+The sample in [examples/publish-config.json](examples/publish-config.json) remains as a reference copy.
 
 Supported template variables for `command` publishers:
 
@@ -132,11 +165,9 @@ Current adapter status:
 
 Deploy auto-loads environment variables from:
 
-- `SKILL_TOOLING_ENV_FILE` if set
-- `.env` in the current working directory
-- `.skill-tooling.env` in the current working directory
-- `.env` in the source family repo
-- `.skill-tooling.env` in the source family repo
+- `.env` in the `skill-tooling` repo
+- `.skill-tooling.env` in the `skill-tooling` repo
+- `SKILL_TOOLING_ENV_FILE` if you explicitly want to override the default env file
 
 Existing shell environment variables win over `.env` values.
 
@@ -144,7 +175,8 @@ Security rules:
 
 - `.env` files are for local secrets only and are git-ignored.
 - Secrets should not be stored in `publish-config.json`.
-- Repo-based deploys do not load `.env` from the cloned family repo.
+- Family repo or current-directory `.env` files are not trusted implicitly.
+- Any non-default env file must be explicitly selected with `SKILL_TOOLING_ENV_FILE`.
 - `.env` loading only accepts a small allowlist of deployment-related keys.
 
 Typical variables:
@@ -152,9 +184,15 @@ Typical variables:
 - `OPENAI_API_KEY` for `openai-skills`
 - `ANTHROPIC_API_KEY` for the `ant` CLI when you enable `claude-agent`
 - `CODEX_HOME` for `codex-skills`
-- `SKILL_TOOLING_CONFIG` for a default publish config path
+- `SKILL_TOOLING_CONFIG` to override the default publish config path
 
 Starter values are shown in [examples/.env.example](examples/.env.example).
+
+Typical local setup:
+
+```bash
+cp examples/.env.example skill-tooling/.env
+```
 
 ## Installation Roots
 

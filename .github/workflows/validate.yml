@@ -26,6 +26,20 @@ jobs:
         bash -n tests/smoke.sh
         python3 -m py_compile scripts/skill_tooling.py
 
+    - name: Validate Python project metadata
+      run: |
+        python3 - <<'PY'
+        import pathlib
+        import tomllib
+
+        pyproject = pathlib.Path("pyproject.toml")
+        data = tomllib.loads(pyproject.read_text())
+        project = data["project"]
+        assert project["name"] == "skill-tooling"
+        assert data["tool"]["poetry"]["package-mode"] is False
+        assert pathlib.Path("poetry.lock").exists()
+        PY
+
     - name: Check scripts are executable
       run: |
         test -x scripts/create-family || { echo "scripts/create-family not executable"; exit 1; }

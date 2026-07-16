@@ -9,6 +9,7 @@ import json
 import os
 import re
 import shutil
+import shlex
 import subprocess
 import sys
 import tempfile
@@ -59,6 +60,15 @@ DEFAULT_TARGETS = [
     "openai-chatgpt",
     "codex",
 ]
+TARGET_DISPLAY_NAMES = {
+    "grok": "Grok",
+    "grok-build": "Grok Build",
+    "claude": "Claude",
+    "claude-code": "Claude Code",
+    "openai-chatgpt": "OpenAI/ChatGPT",
+    "codex": "Codex",
+}
+DEFAULT_PUBLISH_CONFIG_FILENAMES = ("publish-config.json",)
 
 HISTORY_ROOT_DIRNAME = ".skill-tooling"
 DEFAULT_DOTENV_FILENAMES = (".env", ".skill-tooling.env")
@@ -306,7 +316,7 @@ def parse_dotenv_line(line: str) -> tuple[str, str] | None:
     return key, value
 
 
-def load_dotenv_file(path: Path) -> bool:
+def load_dotenv_file(path: Path, protected_keys: set[str], loaded_keys: set[str]) -> bool:
     if not path.exists():
         return False
     for line in read_text(path).splitlines():
@@ -316,29 +326,32 @@ def load_dotenv_file(path: Path) -> bool:
         key, value = parsed
         if key not in ALLOWED_DOTENV_KEYS:
             raise ValidationError(f"Unsupported environment key in {path}: {key}")
-        os.environ.setdefault(key, value)
+        if key in protected_keys:
+            continue
+        os.environ[key] = value
+        loaded_keys.add(key)
     return True
 
 
 def autoload_dotenv(source_root: Path | None = None, include_source_root: bool = True) -> list[Path]:
     loaded: list[Path] = []
     candidates: list[Path] = []
-    roots = [Path.cwd()]
-    if include_source_root and source_root is not None:
-        roots.append(source_root)
-    for root in roots:
-        if root is None:
-            continue
-        for name in DEFAULT_DOTENV_FILENAMES:
-            candidate = root / name
-            if candidate not in candidates:
-                candidates.append(candidate)
+    tooling_root = Path(__file__).resolve().parent.parent
+    for name in DEFAULT_DOTENV_FILENAMES:
+        candidate = tooling_root / name
+        if candidate not in candidates:
+            candidates.append(candidate)
     explicit_path = os.environ.get("SKILL_TOOLING_ENV_FILE")
     if explicit_path:
-        candidates.insert(0, Path(explicit_path).expanduser().resolve())
+        explicit_candidate = Path(explicit_path).expanduser().resolve()
+        if explicit_candidate not in candidates:
+            candidates.append(explicit_candidate)
+
+    protected_keys = set(os.environ.keys())
+    loaded_keys: set[str] = set()
 
     for candidate in candidates:
-        if load_dotenv_file(candidate):
+        if load_dotenv_file(candidate, protected_keys, loaded_keys):
             loaded.append(candidate)
     return loaded
 
@@ -436,7 +449,10 @@ def parse_frontmatter(markdown: str, source: Path) -> tuple[dict[str, str], str]
 def load_manifest(source: Path) -> Family:
     manifest_path = source / "family.json"
     if not manifest_path.exists():
-        raise ValidationError(f"Missing manifest: {manifest_path}")
+        raise ValidationError(
+            f"Missing family manifest. Expected canonical manifest file at {manifest_path}. "
+            "This tool currently requires the manifest filename `family.json`."
+        )
 
     try:
         manifest = json.loads(read_text(manifest_path))
@@ -481,11 +497,30 @@ def run_templated_command(command_template: list[str], template_vars: dict[str, 
     command = [part.format(**template_vars) for part in command_template]
     try:
         completed = subprocess.run(command, check=True, capture_output=True, text=True)
+    except FileNotFoundError as exc:
+        quoted = shlex.join(command)
+        raise ValidationError(
+            f"{error_prefix}\nRequired executable was not found: {exc.filename}\nCommand: {quoted}"
+        ) from exc
     except subprocess.CalledProcessError as exc:
         stderr = exc.stderr.strip()
         raise ValidationError(error_prefix + (f"\n{stderr}" if stderr else "")) from exc
     stdout = completed.stdout.strip()
     return stdout or "command completed"
+
+
+def run_command(command: list[str], error_prefix: str, cwd: Path | None = None) -> str:
+    try:
+        completed = subprocess.run(command, check=True, capture_output=True, text=True, cwd=str(cwd) if cwd else None)
+    except FileNotFoundError as exc:
+        quoted = shlex.join(command)
+        raise ValidationError(
+            f"{error_prefix}\nRequired executable was not found: {exc.filename}\nCommand: {quoted}"
+        ) from exc
+    except subprocess.CalledProcessError as exc:
+        stderr = exc.stderr.strip()
+        raise ValidationError(error_prefix + (f"\n{stderr}" if stderr else "")) from exc
+    return completed.stdout.strip()
 
 
 def http_json_request(method: str, url: str, headers: dict[str, str], data: bytes | None = None) -> dict:
@@ -733,7 +768,14 @@ def render_target_bundle(output_root: Path, family: Family, skills: list[Skill],
 
     bundle_dir = output_root / target
     if bundle_dir.exists():
-        shutil.rmtree(bundle_dir)
+        try:
+            shutil.rmtree(bundle_dir)
+        except PermissionError as exc:
+            raise ValidationError(
+                f"Cannot rewrite generated target directory {bundle_dir}. "
+                "The deploy process needs write permission to remove and recreate that folder. "
+                "If the repo is outside the writable environment, run the command locally or use --output to write elsewhere."
+            ) from exc
     bundle_dir.mkdir(parents=True, exist_ok=True)
 
     ext = TARGET_FILE_EXTENSIONS[target]
@@ -864,6 +906,127 @@ def load_publish_config(config_path: Path | None) -> dict[str, PublisherConfig]:
     return configs
 
 
+def resolve_publish_config_path(args: argparse.Namespace, source_root: Path | None = None) -> Path | None:
+    tooling_root = Path(__file__).resolve().parent.parent
+
+    if args.config:
+        return Path(args.config).expanduser().resolve()
+
+    env_path = os.environ.get("SKILL_TOOLING_CONFIG")
+    if env_path:
+        env_candidate = Path(env_path).expanduser()
+        if not env_candidate.is_absolute():
+            env_candidate = tooling_root / env_candidate
+        return env_candidate.resolve()
+
+    search_roots: list[Path] = []
+    if source_root is not None:
+        search_roots.append(source_root)
+    search_roots.append(Path.cwd())
+    search_roots.append(tooling_root)
+
+    seen: set[Path] = set()
+    for root in search_roots:
+        if root in seen:
+            continue
+        seen.add(root)
+        for filename in DEFAULT_PUBLISH_CONFIG_FILENAMES:
+            candidate = root / filename
+            if candidate.exists():
+                return candidate.resolve()
+
+    return None
+
+
+def resolve_command_executable(executable: str) -> Path | None:
+    candidate = Path(executable).expanduser()
+    if candidate.is_absolute():
+        return candidate if candidate.exists() else None
+    resolved = shutil.which(executable)
+    return Path(resolved).resolve() if resolved else None
+
+
+def ensure_writable_directory(path: Path, label: str) -> None:
+    probe_root = path if path.exists() else path.parent
+    if not probe_root.exists():
+        probe_root.mkdir(parents=True, exist_ok=True)
+    try:
+        with tempfile.NamedTemporaryFile(dir=probe_root, prefix=".skill-tooling-write-test-", delete=True):
+            pass
+    except PermissionError as exc:
+        raise ValidationError(f"{label} is not writable: {probe_root}") from exc
+
+
+def preflight_publish_target(
+    target: str,
+    family: Family,
+    install_paths: dict[str, Path],
+    publish_configs: dict[str, PublisherConfig],
+) -> tuple[str, str]:
+    config = publish_configs.get(target)
+    if config is None:
+        config = PublisherConfig(mode="copy")
+
+    mode = config.mode
+    if mode == "copy":
+        install_root = resolve_install_root(target, install_paths, config)
+        if install_root is None:
+            env_name = TARGET_INSTALL_ENV[target]
+            raise ValidationError(
+                f"{target}: no install root configured for copy publish. "
+                f"Use --install-path {target}=/path, set {env_name}, or define install_root in publish-config.json."
+            )
+        ensure_writable_directory(install_root, f"{target} install root")
+        return mode, f"install root {install_root}"
+
+    if mode == "command":
+        if not config.command:
+            raise ValidationError(f"{target}: command publish mode is configured but no command is defined")
+        executable = resolve_command_executable(config.command[0])
+        if executable is None:
+            raise ValidationError(f"{target}: required publish executable not found: {config.command[0]}")
+        return mode, str(executable)
+
+    if mode == "openai-skills":
+        env_name = config.api_key_env or "OPENAI_API_KEY"
+        publisher_api_key(target, config, "OPENAI_API_KEY")
+        return mode, f"API key {env_name}"
+
+    if mode == "claude-agent":
+        cli_path = config.cli_path or "ant"
+        executable = resolve_command_executable(cli_path)
+        if executable is None:
+            raise ValidationError(f"{target}: required Claude executable not found: {cli_path}")
+        return mode, str(executable)
+
+    if mode == "codex-skills":
+        install_root = resolve_codex_skills_root(install_paths, config)
+        ensure_writable_directory(install_root, f"{target} skills root")
+        return mode, f"skills root {install_root}"
+
+    raise ValidationError(f"{target}: unsupported publish mode {mode}")
+
+
+def preflight_publish_targets(
+    selected_targets: list[str],
+    family: Family,
+    install_paths: dict[str, Path],
+    publish_configs: dict[str, PublisherConfig],
+) -> list[tuple[str, str, str]]:
+    results: list[tuple[str, str, str]] = []
+    errors: list[str] = []
+    for target in selected_targets:
+        try:
+            mode, detail = preflight_publish_target(target, family, install_paths, publish_configs)
+            results.append((target, mode, detail))
+        except ValidationError as exc:
+            errors.append(str(exc))
+    if errors:
+        lines = ["Publish preflight failed:"] + [f"- {error}" for error in errors]
+        raise ValidationError("\n".join(lines))
+    return results
+
+
 def publish_copy(
     bundle_dir: Path,
     target: str,
@@ -939,7 +1102,7 @@ def build_openai_skill_bundle(skill: Skill, family: Family, target: str, work_di
     write_text(skill_root / "SKILL.md", skill_markdown)
     zip_path = work_dir / f"{skill.skill_id}.zip"
     with zipfile.ZipFile(zip_path, "w", compression=zipfile.ZIP_DEFLATED) as zf:
-        zf.write(skill_root / "SKILL.md", arcname="SKILL.md")
+        zf.write(skill_root / "SKILL.md", arcname=f"{skill.skill_id}/SKILL.md")
     return zip_path
 
 
@@ -975,10 +1138,17 @@ def publish_codex_skills(
             continue
         skill_name = codex_skill_name(family, skill)
         destination = install_root / skill_name
-        if destination.exists():
-            shutil.rmtree(destination)
-        destination.mkdir(parents=True, exist_ok=True)
-        write_text(destination / "SKILL.md", render_codex_skill_markdown(family, skill, target))
+        try:
+            if destination.exists():
+                shutil.rmtree(destination)
+            destination.mkdir(parents=True, exist_ok=True)
+            write_text(destination / "SKILL.md", render_codex_skill_markdown(family, skill, target))
+        except PermissionError as exc:
+            raise ValidationError(
+                f"Cannot install Codex skill {skill_name} into {destination}. "
+                "The deploy process needs write permission to the Codex skills directory. "
+                "Set CODEX_HOME or SKILL_TOOLING_CODEX_INSTALL_ROOT to a writable location, or run locally with sufficient permissions."
+            ) from exc
         installed_skills[skill.skill_id] = {
             "skill_name": skill_name,
             "destination": str(destination),
@@ -1136,6 +1306,11 @@ def publish_claude_agent(
 
     try:
         completed = subprocess.run(command, check=True, capture_output=True, text=True)
+    except FileNotFoundError as exc:
+        quoted = shlex.join(command)
+        raise ValidationError(
+            f"Claude agent publish failed for target {target}: required executable was not found: {exc.filename}\nCommand: {quoted}"
+        ) from exc
     except subprocess.CalledProcessError as exc:
         stderr = exc.stderr.strip()
         raise ValidationError(
@@ -1347,6 +1522,94 @@ def repo_to_clone_url(repo: str) -> str:
     )
 
 
+def ensure_git_repo(path: Path) -> None:
+    run_command(["git", "rev-parse", "--show-toplevel"], f"{path} is not inside a git repository", cwd=path)
+
+
+def git_current_branch(path: Path) -> str:
+    return run_command(["git", "branch", "--show-current"], "Failed to determine current git branch", cwd=path)
+
+
+def git_has_staged_or_unstaged_changes(path: Path) -> bool:
+    status = run_command(["git", "status", "--porcelain"], "Failed to determine git status", cwd=path)
+    return bool(status.strip())
+
+
+def checkout_release_branch(path: Path, branch: str) -> None:
+    existing = run_command(["git", "branch", "--list", branch], f"Failed checking whether branch {branch} exists", cwd=path)
+    if existing.strip():
+        run_command(["git", "checkout", branch], f"Failed to checkout existing branch {branch}", cwd=path)
+    else:
+        run_command(["git", "checkout", "-b", branch], f"Failed to create branch {branch}", cwd=path)
+
+
+def run_git_workflow(args: argparse.Namespace, repo_path: Path, family: Family) -> None:
+    if getattr(args, "repo", None):
+        raise ValidationError("Git workflow options are only supported with --source, not --repo")
+    ensure_git_repo(repo_path)
+
+    if args.merge_pr and not args.open_pr:
+        raise ValidationError("--merge-pr requires --open-pr")
+    if args.open_pr and not args.push:
+        raise ValidationError("--open-pr requires --push")
+
+    if args.branch:
+        checkout_release_branch(repo_path, args.branch)
+        print(f"Git branch: {args.branch}")
+    else:
+        print(f"Git branch: {git_current_branch(repo_path)}")
+
+    run_command(["git", "add", "."], "Failed to stage changes for release", cwd=repo_path)
+    if not git_has_staged_or_unstaged_changes(repo_path):
+        print("Git: no changes to commit")
+        return
+
+    commit_message = args.commit_message or f"Deploy {family.name}"
+    run_command(["git", "commit", "-m", commit_message], "Failed to create release commit", cwd=repo_path)
+    print(f"Git commit: {commit_message}")
+
+    branch_name = git_current_branch(repo_path)
+    if args.push:
+        run_command(["git", "push", "-u", "origin", branch_name], f"Failed to push branch {branch_name}", cwd=repo_path)
+        print(f"Git push: {branch_name}")
+
+    if args.open_pr:
+        base = args.base or "main"
+        pr_title = args.pr_title or commit_message
+        pr_body = "\n".join(
+            [
+                f"Automated skill release for `{family.name}`.",
+                "",
+                "Generated by `skill-deploy --git`.",
+            ]
+        )
+        pr_url = run_command(
+            [
+                "gh",
+                "pr",
+                "create",
+                "--base",
+                base,
+                "--head",
+                branch_name,
+                "--title",
+                pr_title,
+                "--body",
+                pr_body,
+            ],
+            f"Failed to create pull request for branch {branch_name}",
+            cwd=repo_path,
+        )
+        print(f"Git PR: {pr_url.splitlines()[-1]}")
+
+        if args.merge_pr:
+            merge_command = ["gh", "pr", "merge", branch_name, "--merge"]
+            if args.delete_branch:
+                merge_command.append("--delete-branch")
+            run_command(merge_command, f"Failed to merge pull request for branch {branch_name}", cwd=repo_path)
+            print(f"Git merge: {branch_name} -> {base}")
+
+
 @contextlib.contextmanager
 def resolve_source_context(args: argparse.Namespace) -> Iterable[SourceContext]:
     if getattr(args, "repo", None):
@@ -1525,17 +1788,15 @@ def deploy_family_repo(args: argparse.Namespace) -> int:
     requested_targets = args.target or ["all"]
     install_paths = parse_install_paths(args.install_path or [])
     publish_requested = args.publish or args.install or bool(args.install_path)
+    if (args.push or args.open_pr or args.merge_pr or args.branch or args.commit_message or args.pr_title or args.delete_branch) and not args.git:
+        raise ValidationError("Git workflow flags require --git")
 
     with resolve_source_context(args) as source_context:
         loaded_env_files = autoload_dotenv(
             source_context.path,
             include_source_root=not bool(getattr(args, "repo", None)),
         )
-        config_path = None
-        if args.config:
-            config_path = Path(args.config).expanduser().resolve()
-        elif os.environ.get("SKILL_TOOLING_CONFIG"):
-            config_path = Path(os.environ["SKILL_TOOLING_CONFIG"]).expanduser().resolve()
+        config_path = resolve_publish_config_path(args, source_context.path)
         publish_configs = load_publish_config(config_path)
         family, skills = load_family_repo(source_context.path)
 
@@ -1559,10 +1820,18 @@ def deploy_family_repo(args: argparse.Namespace) -> int:
         print(f"Resolved source: {source_context.path}")
         print(f"Output root: {output_root}")
         print(f"History dir: {history_dir}")
+        if config_path is not None:
+            print(f"Publish config: {config_path}")
         if loaded_env_files:
             print("Loaded env files:")
             for env_file in loaded_env_files:
                 print(f"- {env_file}")
+
+        if publish_requested:
+            preflight_results = preflight_publish_targets(selected_targets, family, install_paths, publish_configs)
+            print("Publish preflight:")
+            for target, mode, detail in preflight_results:
+                print(f"- {target}: {mode} | {detail}")
 
         receipt_targets: list[dict] = []
 
@@ -1583,7 +1852,7 @@ def deploy_family_repo(args: argparse.Namespace) -> int:
                     skills,
                 )
                 receipt_targets.append(publish_result_to_dict(result))
-                print(f"  Published {target}: {result.publish_result}")
+                print(f"  Deployed to {TARGET_DISPLAY_NAMES.get(target, target)}: {result.publish_result}")
                 print(f"  Verified {target}: {result.verification_result}")
             else:
                 receipt_targets.append(
@@ -1597,6 +1866,15 @@ def deploy_family_repo(args: argparse.Namespace) -> int:
                         "rollback": {"mode": "none", "backup_path": None, "had_existing_destination": False, "command": None},
                     }
                 )
+
+        if publish_requested:
+            print(f"Published targets: {', '.join(selected_targets)}")
+        else:
+            print(
+                "Generated target bundles only. Nothing was published. "
+                "Re-run with --publish to publish all family-enabled targets "
+                "or combine --publish with --target to limit the publish set."
+            )
 
         receipt_payload = {
             "deployment_id": deployment_id,
@@ -1615,6 +1893,9 @@ def deploy_family_repo(args: argparse.Namespace) -> int:
         }
         receipt_path = write_receipt(history_dir, deployment_id, receipt_payload)
         print(f"Receipt: {receipt_path}")
+
+        if args.git:
+            run_git_workflow(args, source_context.path, family)
 
     print("Deployment complete.")
     return 0
@@ -1709,11 +1990,24 @@ def build_parser() -> argparse.ArgumentParser:
     deploy_parser.add_argument("--ref", help="Git branch, tag, or ref to clone when using --repo.")
     deploy_parser.add_argument("--output", help="Output root for generated tool directories. Defaults to the source repo root.")
     deploy_parser.add_argument("--target", action="append", help="Deployment target. Repeatable. Use all to deploy every family-enabled target.")
-    deploy_parser.add_argument("--publish", action="store_true", help="Publish each generated target folder using the configured target publishers.")
+    deploy_parser.add_argument(
+        "--publish",
+        action="store_true",
+        help="Publish every selected target using the configured publishers. If --target is omitted, publishes all targets listed in family.json.",
+    )
     deploy_parser.add_argument("--install", action="store_true", help="Compatibility alias for --publish when using copy-based publishers.")
     deploy_parser.add_argument("--install-path", action="append", help="Copy-publisher install root in the form target=/path. Repeatable.")
     deploy_parser.add_argument("--config", help="Path to the publish config JSON. Defaults to SKILL_TOOLING_CONFIG if set.")
     deploy_parser.add_argument("--history-dir", help="Directory where deployment receipts and backups should be stored.")
+    deploy_parser.add_argument("--git", action="store_true", help="Stage and commit the resulting repo changes after deploy. Local --source repos only.")
+    deploy_parser.add_argument("--branch", help="Git branch to create or checkout before committing deploy changes.")
+    deploy_parser.add_argument("--commit-message", help="Git commit message to use when --git is enabled. Defaults to `Deploy <family-name>`.")
+    deploy_parser.add_argument("--push", action="store_true", help="Push the current branch after committing. Requires --git.")
+    deploy_parser.add_argument("--open-pr", action="store_true", help="Open a pull request with gh after pushing. Requires --git and --push.")
+    deploy_parser.add_argument("--merge-pr", action="store_true", help="Merge the pull request after opening it. Requires --open-pr.")
+    deploy_parser.add_argument("--delete-branch", action="store_true", help="Delete the remote branch when merging a pull request with --merge-pr.")
+    deploy_parser.add_argument("--base", default="main", help="Base branch for pull requests created with --open-pr. Defaults to main.")
+    deploy_parser.add_argument("--pr-title", help="Optional pull request title. Defaults to the commit message.")
     deploy_parser.set_defaults(func=deploy_family_repo)
 
     rollback_parser = subparsers.add_parser("rollback", help="Rollback a previous deployment from a receipt.")
