@@ -15,7 +15,6 @@ family-repo/
   dist/
     grok/
     grok-build/
-    claude-local/
     claude-ai/
     claude-code/
     openai-skills-api/
@@ -45,7 +44,6 @@ If a generated tool directory is changed by hand, the next deploy will overwrite
   "targets": [
     "grok",
     "grok-build",
-    "claude-local",
     "claude-ai",
     "claude-code",
     "openai-skills-api",

@@ -37,7 +37,6 @@
         "enum": [
           "grok",
           "grok-build",
-          "claude-local",
           "claude-ai",
           "claude-code",
           "openai-skills-api",

@@ -65,7 +65,6 @@ my-family/
   dist/
     grok/
     grok-build/
-    claude-local/
     claude-ai/
     claude-code/
     openai-skills-api/
@@ -104,7 +103,6 @@ The current implementation does successfully provide:
 - Target folder generation under `dist/` for:
   - `grok`
   - `grok-build`
-  - `claude-local`
   - `claude-ai`
   - `claude-code`
   - `openai-skills-api`
@@ -117,8 +115,8 @@ The current implementation does successfully provide:
 - Built-in OpenAI hosted skill publishing for `openai-skills-api`
 - Built-in ChatGPT Work manual-handoff publishing for `chatgpt-work`
 - Built-in local Codex skill publishing for `codex`
-- Built-in local Claude skill publishing for `claude-local` and `claude-code`
 - Built-in manual Claude Desktop / claude.ai handoff publishing for `claude-ai`
+- Built-in local Claude Code skill publishing for `claude-code`
 - Deployment receipts and rollback support for copy-based publishers
 - Rollback support for built-in local skill publishers (`grok-skills`, `claude-skills`, `codex-skills`)
 - Formal source skill frontmatter schema validation for `name` and `description`
@@ -142,8 +140,8 @@ Runtime assumptions:
 - Any `command` publishers refer to locally installed wrapper commands or scripts
 - Grok local skill publishing defaults to `~/.grok/skills`
 - OpenAI hosted publishing requires an API key
-- Claude local skill publishing defaults to `~/.claude/skills` and honors `CLAUDE_CONFIG_DIR`
-- Claude Desktop / claude.ai Skills UI is a separate product surface from local file installs
+- Claude Code local skill publishing defaults to `~/.claude/skills` and honors `CLAUDE_CONFIG_DIR`
+- Claude Desktop / claude.ai Skills UI is a separate product surface and remains manual-only here
 - Codex local publishing uses explicit roots when configured; otherwise it defaults to `$HOME/.agents/skills` and updates an existing `$HOME/.codex/skills` legacy/current-session root
 - Claude hosted agent publishing requires the Anthropic CLI only if you explicitly opt into `claude-agent`
 - Deploy auto-loads `.env` / `.skill-tooling.env` from the `skill-tooling` repo by default
@@ -254,8 +252,8 @@ Current state:
 - `openai-skills-api` publishes hosted skills through the OpenAI API
 - `chatgpt-work` prepares manual handoff bundles rather than completing a vendor UI flow
 - `codex` can publish local Codex skills into a Codex skills root
-- `claude-local` and `claude-code` can publish local Claude skills into Claude's documented skills root
 - `claude-ai` can generate the manual `.skill` handoff bundle for Claude Desktop / claude.ai
+- `claude-code` can publish local Claude Code skills into Claude's documented skills root
 - `grok` and `grok-build` can publish local Grok skills into `~/.grok/skills` or an explicit install root
 
 Issue:

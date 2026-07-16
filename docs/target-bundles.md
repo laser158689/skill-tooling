@@ -11,8 +11,8 @@ customer-support/
     researcher.md
   dist/
     grok/
-    claude-local/
     claude-ai/
+    claude-code/
     codex/
 ```
 
@@ -33,10 +33,10 @@ Examples:
 
 - `dist/grok/family.grok`
 - `dist/grok/orchestrator.grok`
-- `dist/claude-local/family.skill`
-- `dist/claude-local/researcher.skill`
 - `dist/claude-ai/family.skill`
 - `dist/claude-ai/researcher.skill`
+- `dist/claude-code/family.skill`
+- `dist/claude-code/researcher.skill`
 - `dist/codex/orchestrator.prompt`
 
 ## Purpose
@@ -50,7 +50,6 @@ These generated folders serve two roles:
 
 - `grok` uses `.grok`
 - `grok-build` uses `.grokbuild`
-- `claude-local` uses `.skill`
 - `claude-ai` uses `.skill`
 - `claude-code` uses `.skill`
 - `openai-skills-api` uses `.prompt`
@@ -71,11 +70,11 @@ Publishers are configured per target in JSON:
       "mode": "openai-skills",
       "api_key_env": "OPENAI_API_KEY"
     },
-    "claude-local": {
-      "mode": "claude-skills"
-    },
     "claude-ai": {
       "mode": "manual"
+    },
+    "claude-code": {
+      "mode": "claude-skills"
     },
     "chatgpt-work": {
       "mode": "manual"
@@ -99,7 +98,7 @@ Publishers are configured per target in JSON:
 
 `grok-skills` installs one local Grok skill directory per source skill under `~/.grok/skills` by default, or into an explicit target install root when configured.
 
-`claude-skills` installs one local Claude skill directory per source skill under Claude's documented local skills directory.
+`claude-skills` installs one local Claude Code skill directory per source skill under Claude's documented local skills directory.
 
 `claude-ai` produces the manual `.skill` handoff bundle for Claude Desktop / claude.ai. It does not currently automate cloud/UI publication.
 
