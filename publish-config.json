@@ -6,11 +6,17 @@
     "grok-build": {
       "mode": "grok-skills"
     },
+    "grok-web": {
+      "mode": "manual"
+    },
     "claude-ai": {
       "mode": "manual"
     },
     "claude-code": {
       "mode": "claude-skills"
+    },
+    "openai-plugin": {
+      "mode": "manual"
     },
     "chatgpt-work": {
       "mode": "manual"

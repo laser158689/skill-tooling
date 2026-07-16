@@ -68,7 +68,7 @@ Goal:
 Tasks:
 - keep `openai-skills-api` stable
 - keep `chatgpt-work` manual unless official automation is documented
-- research and implement `openai-plugin` if the packaging surface is confirmed as the right enterprise distribution unit
+- keep `openai-plugin` as the package surface unless official automation is documented
 - preserve `codex` as a local developer surface, not the enterprise abstraction
 
 Exit criteria:
@@ -94,7 +94,7 @@ Goal:
 
 Tasks:
 - preserve local Grok Build install behavior where valid
-- define a separate `grok-web` target if the web/app skill surface proves distinct
+- keep `grok-web` separate from the local Grok / Grok Build surfaces
 - improve Grok-native packaging where official guidance exists
 
 Exit criteria:
@@ -121,5 +121,5 @@ In strict order:
 2. normalize per-target artifact contracts
 3. implement API rollback
 4. harden security and provenance
-5. research and implement OpenAI plugin packaging if officially supported
+5. harden `openai-plugin`, `grok-web`, `chatgpt-work`, and `claude-ai` manual bundle contracts
 6. research and implement better enterprise-native Claude and Grok packaging where officially supported

@@ -51,6 +51,7 @@ Fix:
 
 Current state:
 - `chatgpt-work` and `claude-ai` are manual handoff bundles
+- `grok-web` and `openai-plugin` now also have manual handoff/package bundles
 
 Needed state:
 - manual surfaces should still emit polished native artifacts, consistent install guides, and artifact manifests
@@ -63,6 +64,7 @@ Fix:
 
 Current state:
 - `openai-skills-api` exists
+- `openai-plugin` now exists as a manual package surface
 - `chatgpt-work` exists as a manual surface
 
 Needed state:
@@ -72,7 +74,7 @@ Needed state:
   - plugin packaging as the likely enterprise distribution unit
 
 Fix:
-- research and, if supported, implement `openai-plugin`
+- keep `openai-plugin` as the package surface until a real supported workspace publish path is documented
 - keep `chatgpt-work` manual until a real supported publish path is documented
 
 ### 6. Claude enterprise automation strategy is incomplete
@@ -92,12 +94,13 @@ Fix:
 
 Current state:
 - `grok` and `grok-build` publish locally
+- `grok-web` now exists as a manual web/app surface
 
 Needed state:
 - separate Grok web/app admin distribution from Grok Build developer-local distribution
 
 Fix:
-- likely split the web/app surface into a dedicated `grok-web` target
+- keep `grok-web` separate from local Grok / Grok Build installs
 - keep local Grok Build installs explicit and separate
 
 ## P2 Gaps

@@ -17,16 +17,18 @@ This matrix describes the intended deployment workflow in workflow order and the
 | Run target preflight before publish | Real tooling |
 | Fail the whole publish before mutation if any requested target preflight fails | Real tooling |
 | Publish `openai-skills-api` through the hosted API path | Real tooling |
+| Prepare `openai-plugin` native plugin package and install guide | Real tooling |
+| Publish `openai-plugin` automatically through an official workspace API | Not implemented |
 | Prepare `chatgpt-work` native manual bundle and install guide | Real tooling |
 | Publish `chatgpt-work` automatically through an official API | Not implemented |
 | Prepare `claude-ai` native manual bundle and install guide | Real tooling |
 | Publish `claude-ai` automatically through an official API | Not implemented |
+| Prepare `grok-web` native manual bundle and install guide | Real tooling |
+| Publish `grok-web` automatically through an official API | Not implemented |
 | Publish `claude-code` through local skill install | Real tooling |
 | Publish `codex` through local skill install | Real tooling |
 | Publish `grok` through local skill install | Real tooling |
 | Publish `grok-build` through local skill install | Real tooling |
-| Publish future OpenAI plugin packaging target | Not implemented |
-| Publish future Grok web/app skill target | Not implemented |
 | Verify API-managed publishes | Real tooling |
 | Verify local-install publishes | Real tooling |
 | Verify manual targets by artifact generation and install guide output | Real tooling |
@@ -41,8 +43,10 @@ This matrix describes the intended deployment workflow in workflow order and the
 | Target | Publish Class |
 |---|---|
 | `openai-skills-api` | `api` |
+| `openai-plugin` | `manual_ui` |
 | `chatgpt-work` | `manual_ui` |
 | `claude-ai` | `manual_ui` |
+| `grok-web` | `manual_ui` |
 | `claude-code` | `local_install` |
 | `codex` | `local_install` |
 | `grok` | `local_install` |

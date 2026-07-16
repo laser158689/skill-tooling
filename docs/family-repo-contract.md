@@ -15,9 +15,11 @@ family-repo/
   dist/
     grok/
     grok-build/
+    grok-web/
     claude-ai/
     claude-code/
     openai-skills-api/
+    openai-plugin/
     chatgpt-work/
     codex/
 ```
@@ -44,9 +46,11 @@ If a generated tool directory is changed by hand, the next deploy will overwrite
   "targets": [
     "grok",
     "grok-build",
+    "grok-web",
     "claude-ai",
     "claude-code",
     "openai-skills-api",
+    "openai-plugin",
     "chatgpt-work",
     "codex"
   ]

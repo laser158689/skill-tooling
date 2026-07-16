@@ -67,9 +67,11 @@ Current target ids:
 
 - `grok`
 - `grok-build`
+- `grok-web`
 - `claude-ai`
 - `claude-code`
 - `openai-skills-api`
+- `openai-plugin`
 - `chatgpt-work`
 - `codex`
 
@@ -77,9 +79,11 @@ Current semantics:
 
 - `grok`: local Grok skill install
 - `grok-build`: local Grok Build skill install
+- `grok-web`: manual Grok web/app Skills handoff bundle
 - `claude-ai`: manual Claude Skills handoff bundle
 - `claude-code`: local Claude Code skill install
 - `openai-skills-api`: hosted OpenAI API publisher
+- `openai-plugin`: manual OpenAI plugin package bundle
 - `chatgpt-work`: manual ChatGPT Skills handoff bundle
 - `codex`: local Codex skill install
 
@@ -112,7 +116,9 @@ Publish behavior today is mixed across four classes:
 
 ### Manual UI handoff
 
+- `grok-web`
 - `claude-ai`
+- `openai-plugin`
 - `chatgpt-work`
 
 ### Adapter hooks
@@ -133,6 +139,8 @@ The following capabilities are implemented and working:
 - auto-publish local install targets
 - auto-publish `openai-skills-api`
 - prepare manual bundles for `claude-ai`
+- prepare manual bundles for `grok-web`
+- prepare manual plugin packages for `openai-plugin`
 - prepare manual bundles for `chatgpt-work`
 - load local deployment env vars from `skill-tooling/.env`
 - keep deployment state and receipts
@@ -149,7 +157,6 @@ The following things are not implemented or not proven:
 - automated Grok web/app skill creation through an official supported API
 - a single universal enterprise distribution API across vendors
 - full rollback for API-managed publishers
-- a plugin-first OpenAI enterprise packaging path
 - a fully normalized vendor-native packaging model for every target
 
 ## Current Security Model

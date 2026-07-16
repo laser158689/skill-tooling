@@ -63,9 +63,11 @@ cat > "$TMP_CONFIG_FILE" <<EOF
   "targets": {
     "grok": { "mode": "copy", "install_root": "$PUBLISH_ROOT/grok" },
     "grok-build": { "mode": "copy", "install_root": "$PUBLISH_ROOT/grok-build" },
+    "grok-web": { "mode": "manual" },
     "claude-ai": { "mode": "manual" },
     "claude-code": { "mode": "copy", "install_root": "$PUBLISH_ROOT/claude-code" },
     "openai-skills-api": { "mode": "copy", "install_root": "$PUBLISH_ROOT/openai-skills-api" },
+    "openai-plugin": { "mode": "manual" },
     "chatgpt-work": { "mode": "manual" },
     "codex": { "mode": "copy", "install_root": "$PUBLISH_ROOT/codex" }
   }
@@ -163,8 +165,13 @@ test -f "$FAMILY_DIR/dist/grok/README.md"
 test -f "$FAMILY_DIR/dist/grok/manifest.json"
 test -f "$FAMILY_DIR/dist/grok/family.grok"
 test -f "$FAMILY_DIR/dist/grok/orchestrator.grok"
+test -f "$FAMILY_DIR/dist/grok-web/INSTALL.md"
+test -f "$FAMILY_DIR/dist/grok-web/uploads/orchestrator.zip"
+test -f "$FAMILY_DIR/dist/grok-web/uploads/orchestrator/SKILL.md"
 
 test -f "$FAMILY_DIR/dist/claude-ai/INSTALL.md"
+test -f "$FAMILY_DIR/dist/claude-ai/uploads/orchestrator.zip"
+test -f "$FAMILY_DIR/dist/claude-ai/uploads/orchestrator/skill.md"
 test -f "$FAMILY_DIR/dist/claude-code/README.md"
 test -f "$FAMILY_DIR/dist/claude-code/family.skill"
 test -f "$FAMILY_DIR/dist/claude-code/orchestrator.skill"
@@ -172,7 +179,13 @@ grep -q "Coordinate the ${FAMILY_NAME} family" "$FAMILY_DIR/dist/claude-code/orc
 
 test -f "$FAMILY_DIR/dist/codex/family.prompt"
 test -f "$FAMILY_DIR/dist/openai-skills-api/orchestrator.prompt"
+test -f "$FAMILY_DIR/dist/openai-plugin/INSTALL.md"
+test -f "$FAMILY_DIR/dist/openai-plugin/customer-support-plugin.zip"
+test -f "$FAMILY_DIR/dist/openai-plugin/plugin/.codex-plugin/plugin.json"
+test -f "$FAMILY_DIR/dist/openai-plugin/plugin/skills/orchestrator/SKILL.md"
 test -f "$FAMILY_DIR/dist/chatgpt-work/INSTALL.md"
+test -f "$FAMILY_DIR/dist/chatgpt-work/uploads/orchestrator.zip"
+test -f "$FAMILY_DIR/dist/chatgpt-work/uploads/orchestrator/SKILL.md"
 test -f "$CODEX_HOME_ROOT/skills/${FAMILY_NAME}--orchestrator/SKILL.md"
 grep -q "name: \"${FAMILY_NAME}--orchestrator\"" "$CODEX_HOME_ROOT/skills/${FAMILY_NAME}--orchestrator/SKILL.md"
 test -f "$CODEX_DEFAULT_HOME/.agents/skills/${FAMILY_NAME}--orchestrator/SKILL.md"

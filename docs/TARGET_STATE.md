@@ -68,7 +68,8 @@ Definition:
 Examples:
 - `chatgpt-work`
 - `claude-ai`
-- likely future `grok-web`
+- `grok-web`
+- `openai-plugin`
 
 ### `package_only`
 
