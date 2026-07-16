@@ -1336,6 +1336,17 @@ def publish_manual_bundle(bundle_dir: Path, target: str) -> PublishResult:
     )
 
 
+def manual_follow_up_message(target: str, result: PublishResult) -> str | None:
+    if result.mode != "manual":
+        return None
+    if target == "chatgpt-work":
+        return (
+            "Manual next step required: open ChatGPT Work, create one skill per generated `.prompt` file, "
+            f"and follow {result.destination}."
+        )
+    return f"Manual next step required: complete installation using the generated bundle at {result.bundle_dir}."
+
+
 def publish_claude_skills(
     bundle_dir: Path,
     target: str,
@@ -2234,6 +2245,9 @@ def deploy_family_repo(args: argparse.Namespace) -> int:
                 receipt_targets.append(publish_result_to_dict(result))
                 print(f"  Deployed to {TARGET_DISPLAY_NAMES.get(target, target)}: {result.publish_result}")
                 print(f"  Verified {target}: {result.verification_result}")
+                follow_up = manual_follow_up_message(target, result)
+                if follow_up:
+                    print(f"  {follow_up}")
             else:
                 receipt_targets.append(
                     {
