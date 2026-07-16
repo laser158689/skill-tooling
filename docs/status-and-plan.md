@@ -36,7 +36,6 @@ Current target ids:
 
 - `grok`
 - `grok-build`
-- `claude-local`
 - `claude-ai`
 - `claude-code`
 - `openai-skills-api`
@@ -47,7 +46,6 @@ Current target behavior:
 
 - `openai-skills-api`: hosted API publisher
 - `chatgpt-work`: manual handoff bundle only
-- `claude-local`: local Claude skill install
 - `claude-ai`: manual Claude Desktop / claude.ai handoff bundle
 - `claude-code`: local Claude skill install
 - `codex`: local Codex skill install
@@ -65,7 +63,6 @@ FH-Coaches/
   dist/
     grok/
     grok-build/
-    claude-local/
     claude-ai/
     claude-code/
     openai-skills-api/
@@ -199,7 +196,6 @@ The remaining work is now product-gap work, not contract-cleanup work.
 | Generate ChatGPT Work manual upload bundle | Real tooling |
 | Publish `openai-skills-api` | Real tooling |
 | Publish `chatgpt-work` automatically | Manual only |
-| Publish `claude-local` | Real tooling |
 | Publish `claude-ai` | Real tooling |
 | Publish `claude-code` | Real tooling |
 | Publish `codex` | Real tooling |

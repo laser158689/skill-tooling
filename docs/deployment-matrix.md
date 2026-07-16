@@ -13,7 +13,7 @@ This table describes the current end-to-end deployment flow for `skill-tooling`,
 | Do not implicitly load `.env` from family repos or the current working directory | Real tooling |
 | Validate `family.json` schema | Real tooling |
 | Discover skills from `source/*.md` | Real tooling |
-| Generate per-target output folders under `dist/` (`dist/grok/`, `dist/claude-local/`, `dist/claude-ai/`, `dist/codex/`, etc.) | Real tooling |
+| Generate per-target output folders under `dist/` (`dist/grok/`, `dist/claude-ai/`, `dist/codex/`, etc.) | Real tooling |
 | Stage repo changes after deploy (`--git`) | Real tooling |
 | Commit repo changes after deploy | Real tooling |
 | Push release branch after deploy (`--push`) | Real tooling |
@@ -22,8 +22,8 @@ This table describes the current end-to-end deployment flow for `skill-tooling`,
 | Publish `openai-skills-api` via hosted OpenAI Skills API | Real tooling |
 | Publish `chatgpt-work` as a manual handoff bundle with generated prompts and `INSTALL.md` | Real tooling |
 | Publish `codex` via local filesystem skill install | Real tooling |
-| Publish `claude-local` and `claude-code` via Claude local skills install (`~/.claude/skills` or `CLAUDE_CONFIG_DIR/skills`) | Real tooling |
 | Publish `claude-ai` via generated manual handoff bundle for Claude Desktop / claude.ai Skills UI | Real tooling |
+| Publish `claude-code` via Claude local skills install (`~/.claude/skills` or `CLAUDE_CONFIG_DIR/skills`) | Real tooling |
 | Publish `grok` and `grok-build` via local Grok skills install (`~/.grok/skills` by default) | Real tooling |
 | Publish any target via copy mode to install roots | Real tooling |
 | Verify copy publishes or run target verify commands | Real tooling |
@@ -45,7 +45,6 @@ Currently supported local env keys:
 - `SKILL_TOOLING_ENV_FILE`
 - `SKILL_TOOLING_GROK_INSTALL_ROOT`
 - `SKILL_TOOLING_GROK_BUILD_INSTALL_ROOT`
-- `SKILL_TOOLING_CLAUDE_LOCAL_INSTALL_ROOT`
 - `SKILL_TOOLING_CLAUDE_AI_INSTALL_ROOT`
 - `SKILL_TOOLING_CLAUDE_CODE_INSTALL_ROOT`
 - `SKILL_TOOLING_OPENAI_SKILLS_API_INSTALL_ROOT`

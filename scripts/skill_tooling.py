@@ -26,7 +26,6 @@ from typing import Iterable
 TARGET_INSTALL_ENV = {
     "grok": "SKILL_TOOLING_GROK_INSTALL_ROOT",
     "grok-build": "SKILL_TOOLING_GROK_BUILD_INSTALL_ROOT",
-    "claude-local": "SKILL_TOOLING_CLAUDE_LOCAL_INSTALL_ROOT",
     "claude-ai": "SKILL_TOOLING_CLAUDE_AI_INSTALL_ROOT",
     "claude-code": "SKILL_TOOLING_CLAUDE_CODE_INSTALL_ROOT",
     "openai-skills-api": "SKILL_TOOLING_OPENAI_SKILLS_API_INSTALL_ROOT",
@@ -40,7 +39,6 @@ TARGET_ALIASES = {
     "openai": "openai-skills-api",
     "openai-skills": "openai-skills-api",
     "openai-skills-api": "openai-skills-api",
-    "claude-local": "claude-local",
     "claude-ai": "claude-ai",
     "claude-code": "claude-code",
     "grok": "grok",
@@ -51,7 +49,6 @@ TARGET_ALIASES = {
 TARGET_FILE_EXTENSIONS = {
     "grok": ".grok",
     "grok-build": ".grokbuild",
-    "claude-local": ".skill",
     "claude-ai": ".skill",
     "claude-code": ".skill",
     "openai-skills-api": ".prompt",
@@ -62,7 +59,6 @@ TARGET_FILE_EXTENSIONS = {
 SUPPORTED_TARGETS = [
     "grok",
     "grok-build",
-    "claude-local",
     "claude-ai",
     "claude-code",
     "openai-skills-api",
@@ -73,7 +69,6 @@ SUPPORTED_TARGETS = [
 DEFAULT_TARGETS = [
     "grok",
     "grok-build",
-    "claude-local",
     "claude-ai",
     "claude-code",
     "openai-skills-api",
@@ -83,7 +78,6 @@ DEFAULT_TARGETS = [
 TARGET_DISPLAY_NAMES = {
     "grok": "Grok",
     "grok-build": "Grok Build",
-    "claude-local": "Claude Local",
     "claude-ai": "Claude AI",
     "claude-code": "Claude Code",
     "openai-skills-api": "OpenAI Skills API",
@@ -333,10 +327,11 @@ def canonicalize_target(target: str) -> str:
     normalized = target.strip().lower()
     if normalized == "all":
         return normalized
-    if normalized == "claude":
+    if normalized in {"claude", "claude-local"}:
         raise ValidationError(
-            "Target `claude` has been split. Use `claude-local` for the local file-based install surface or "
-            "`claude-ai` for the Claude Desktop / claude.ai Skills surface."
+            "Target `claude-local` has been removed because it did not produce a usable Claude Desktop / claude.ai "
+            "skill surface. Use `claude-ai` for the manual Claude Desktop / claude.ai Skills flow or `claude-code` "
+            "for the local Claude Code file-based surface."
         )
     if normalized not in TARGET_ALIASES:
         raise ValidationError(f"Unsupported target: {target}")
@@ -572,11 +567,11 @@ def load_manifest(source: Path) -> Family:
             "Rename it to `openai-skills-api`. "
             "`chatgpt-work` is now treated as a separate product surface."
         )
-    if isinstance(raw_targets, list) and "claude" in raw_targets:
+    if isinstance(raw_targets, list) and ("claude" in raw_targets or "claude-local" in raw_targets):
         raise ValidationError(
-            f"{manifest_path} uses deprecated target `claude`. "
-            "Rename it to `claude-local` for the local file-based install surface or "
-            "`claude-ai` for the Claude Desktop / claude.ai Skills surface."
+            f"{manifest_path} uses deprecated target `claude` or `claude-local`. "
+            "Use `claude-ai` for the manual Claude Desktop / claude.ai Skills surface or "
+            "`claude-code` for the local Claude Code file-based surface."
         )
 
     validate_against_schema(manifest, FAMILY_MANIFEST_SCHEMA)
@@ -1408,7 +1403,6 @@ def render_claude_ai_install_guide(family: Family, skills: list[Skill]) -> str:
         "",
         "Important:",
         "",
-        "- `claude-local` installs files under `~/.claude/skills`, but that does not make them appear automatically in the Claude Desktop / claude.ai Skills UI.",
         "- Treat this directory as the manual handoff bundle for Claude's visible Skills product surface.",
         "",
         "Recommended flow:",
@@ -2207,7 +2201,6 @@ def create_family_repo(args: argparse.Namespace) -> int:
             f"    {orchestrator_id}.md",
             "  dist/",
             "    grok/",
-            "    claude-local/",
             "    claude-ai/",
             "    claude-code/",
             "    openai-skills-api/",
