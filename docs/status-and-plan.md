@@ -49,8 +49,8 @@ Current target behavior:
 - `claude`: local Claude skill install
 - `claude-code`: local Claude skill install
 - `codex`: local Codex skill install
-- `grok`: wrapper-command stub
-- `grok-build`: wrapper-command stub
+- `grok`: local Grok skill install
+- `grok-build`: local Grok skill install
 
 ### FH-Coaches
 
@@ -106,34 +106,28 @@ The intended deployment outcome is:
 
 ### Product Gaps
 
-1. `grok` and `grok-build` are still stubs.
-   They require local wrapper executables and do not have first-party publishers.
-
-2. `chatgpt-work` is manual only.
+1. `chatgpt-work` is manual only.
    `skill-tooling` builds the correct manual deployable bundle, but it does not automatically install into the ChatGPT Work UI.
 
-3. The OpenAI/ChatGPT split is still incomplete.
+2. The OpenAI/ChatGPT split is still incomplete.
    `openai-skills-api` is a real documented API surface.
    `chatgpt-work` is a real product surface.
    A documented API bridge between them has not been established.
 
-4. There is no documented ChatGPT Work creation API in this repo yet.
+3. There is no documented ChatGPT Work creation API in this repo yet.
    The documented adjacent OpenAI surfaces currently cover hosted OpenAI Skills and triggering existing workspace agents, not creating ChatGPT Work skills.
 
 ### Workflow Gaps
 
-1. Plain `--publish` only works if every target in the manifest is actually deployable in the current environment.
-   This means family repos that list `grok` or `grok-build` still fail preflight on machines without those wrappers.
-
-2. Rollback is incomplete for built-in API publishers.
+1. Rollback is incomplete for built-in API publishers.
    Copy-mode rollback works.
-   Local Claude/Codex skill installs now roll back.
+   Local Grok/Claude/Codex skill installs now roll back.
    API rollback for hosted publishers is still not implemented.
 
-3. Source frontmatter is standardized, but intentionally narrow.
+2. Source frontmatter is standardized, but intentionally narrow.
    It now has a formal schema, but only supports the small metadata surface this project currently needs.
 
-4. Generated target artifacts are structurally correct but not yet proven vendor-native for every target.
+3. Generated target artifacts are structurally correct but not yet proven vendor-native for every target.
    For some targets they are still “our deployable representation,” not a vendor-defined package format.
 
 ### Documentation Gaps
@@ -142,16 +136,13 @@ The intended deployment outcome is:
    `README.md`, `docs/project-state.md`, `docs/deployment-matrix.md`, and the family contract doc need to stay aligned.
 
 2. The exact meaning of “supported” versus “manual” versus “stub” needs to stay explicit.
-   This is especially important for `chatgpt-work`, `grok`, and `grok-build`.
+   This is especially important for `chatgpt-work`.
 
 ### FH-Coaches Gaps
 
-1. `FH-Coaches/family.json` still lists `grok` and `grok-build`.
-   That is structurally valid, but operationally it prevents a clean plain `--publish` in your current environment.
+1. `FH-Coaches` still needs an explicit decision on whether Grok targets should publish into your real `~/.grok/skills` environment or remain generated-only for now.
 
-2. `FH-Coaches` includes generated Grok and Grok Build output in `dist/`, but those are not backed by first-party publishers yet.
-
-3. `FH-Coaches` has a few incidental local artifacts like `.DS_Store`.
+2. `FH-Coaches` has a few incidental local artifacts like `.DS_Store`.
    They are not part of the contract.
 
 ## WIP
@@ -169,13 +160,10 @@ These changes are implemented locally and smoke-tested, but they are not yet doc
 
 ### P0
 
-1. Normalize manifests for real current environments.
-   Remove `grok` and `grok-build` from family manifests that are meant to publish successfully today, starting with `FH-Coaches`, unless the wrappers are intentionally installed and supported.
-
-2. Commit and merge the contract cleanup.
+1. Commit and merge the contract cleanup.
    The repo should not keep drifting between root-level generated folders, `dist/`, and the removed `overrides/` concept.
 
-3. Keep the OpenAI target map honest.
+2. Keep the OpenAI target map honest.
    `openai-skills-api` is real.
    `chatgpt-work` is manual.
    No undocumented ChatGPT Work publisher should be added.
@@ -190,13 +178,10 @@ These changes are implemented locally and smoke-tested, but they are not yet doc
 
 ### P2
 
-1. Build first-party Grok publisher support.
-   If no official API/CLI exists, keep it explicitly stubbed and avoid pretending it is near-complete.
-
-2. Evaluate whether `chatgpt-work` can ever be automated through a documented API.
+1. Evaluate whether `chatgpt-work` can ever be automated through a documented API.
    If not, leave it permanently manual and document that clearly.
 
-3. Add packaging or GitHub Action support for turnkey use from family repos.
+2. Add packaging or GitHub Action support for turnkey use from family repos.
 
 ## Workflow Status
 
@@ -213,8 +198,8 @@ These changes are implemented locally and smoke-tested, but they are not yet doc
 | Publish `claude` | Real tooling |
 | Publish `claude-code` | Real tooling |
 | Publish `codex` | Real tooling |
-| Publish `grok` | Stub only |
-| Publish `grok-build` | Stub only |
+| Publish `grok` | Real tooling |
+| Publish `grok-build` | Real tooling |
 | Publish all targets in manifest with one command | Partial |
 | Git stage/commit/push/PR/merge from deploy | Real tooling |
 | Roll back copy publishes | Real tooling |
@@ -226,5 +211,5 @@ These changes are implemented locally and smoke-tested, but they are not yet doc
 The highest-value next move is to make the target list truthful in practice, not just in documentation:
 
 1. commit and merge the `dist/` plus no-`overrides/` contract cleanup
-2. remove unsupported Grok targets from `FH-Coaches` if you want plain `--publish` to succeed now
+2. decide whether `FH-Coaches` should publish Grok targets into your real `~/.grok/skills` environment or stay generated-only for now
 3. keep `openai-skills-api` and `chatgpt-work` explicitly separated until a documented creation API exists

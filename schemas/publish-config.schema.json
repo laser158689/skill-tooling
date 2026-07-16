@@ -15,7 +15,7 @@
         "properties": {
           "mode": {
             "type": "string",
-            "enum": ["copy", "command", "manual", "openai-skills", "claude-agent", "claude-skills", "codex-skills"]
+            "enum": ["copy", "command", "manual", "openai-skills", "claude-agent", "claude-skills", "codex-skills", "grok-skills"]
           },
           "install_root": {
             "type": "string"

@@ -23,13 +23,13 @@ This table describes the current end-to-end deployment flow for `skill-tooling`,
 | Publish `chatgpt-work` as a manual handoff bundle with generated prompts and `INSTALL.md` | Real tooling |
 | Publish `codex` via local filesystem skill install | Real tooling |
 | Publish `claude` and `claude-code` via Claude local skills install (`~/.claude/skills` or `CLAUDE_CONFIG_DIR/skills`) | Real tooling |
-| Publish `grok` and `grok-build` via wrapper command mode | Architecture exists, first-party adapters not built |
+| Publish `grok` and `grok-build` via local Grok skills install (`~/.grok/skills` by default) | Real tooling |
 | Publish any target via copy mode to install roots | Real tooling |
 | Verify copy publishes or run target verify commands | Real tooling |
 | Write deployment receipts/state under `.skill-tooling/deployments/` | Real tooling |
 | Roll back copy-based publishes | Real tooling |
 | Roll back command-based publishes | Guarded tooling; requires `--allow-command-rollback` |
-| Roll back local skill publishers (`claude-skills`, `codex-skills`) | Real tooling |
+| Roll back local skill publishers (`grok-skills`, `claude-skills`, `codex-skills`) | Real tooling |
 | Roll back API-based publishers (`openai-skills`, `claude-agent`) | Not implemented |
 
 ## Environment Keys

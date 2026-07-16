@@ -1,20 +1,10 @@
 {
   "targets": {
     "grok": {
-      "mode": "command",
-      "command": [
-        "/usr/local/bin/publish-grok-skill-family",
-        "{bundle_dir}",
-        "{family_name}"
-      ]
+      "mode": "grok-skills"
     },
     "grok-build": {
-      "mode": "command",
-      "command": [
-        "/usr/local/bin/publish-grok-build-skill-family",
-        "{bundle_dir}",
-        "{family_name}"
-      ]
+      "mode": "grok-skills"
     },
     "claude": {
       "mode": "claude-skills"

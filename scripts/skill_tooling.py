@@ -178,7 +178,7 @@ PUBLISH_CONFIG_SCHEMA = {
                 "properties": {
                     "mode": {
                         "type": "string",
-                        "enum": ["copy", "command", "manual", "openai-skills", "claude-agent", "claude-skills", "codex-skills"],
+                        "enum": ["copy", "command", "manual", "openai-skills", "claude-agent", "claude-skills", "codex-skills", "grok-skills"],
                     },
                     "install_root": {"type": "string"},
                     "command": {"type": "array", "items": {"type": "string"}},
@@ -633,6 +633,10 @@ def claude_skill_name(family: Family, skill: Skill) -> str:
     return f"{family.name}--{skill.skill_id}"
 
 
+def grok_skill_name(family: Family, skill: Skill) -> str:
+    return f"{family.name}--{skill.skill_id}"
+
+
 def resolve_claude_config_root() -> Path:
     configured_root = os.environ.get("CLAUDE_CONFIG_DIR")
     if configured_root:
@@ -657,6 +661,25 @@ def resolve_claude_skills_roots(
     config: PublisherConfig | None,
 ) -> list[Path]:
     return [configured_claude_skills_root(target, install_paths, config)]
+
+
+def configured_grok_skills_root(
+    target: str,
+    install_paths: dict[str, Path],
+    config: PublisherConfig | None,
+) -> Path | None:
+    return resolve_install_root(target, install_paths, config)
+
+
+def resolve_grok_skills_roots(
+    target: str,
+    install_paths: dict[str, Path],
+    config: PublisherConfig | None,
+) -> list[Path]:
+    configured_root = configured_grok_skills_root(target, install_paths, config)
+    if configured_root is not None:
+        return [configured_root]
+    return [Path.home() / ".grok" / "skills"]
 
 
 def configured_codex_skills_root(
@@ -962,9 +985,9 @@ def load_publish_config(config_path: Path | None) -> dict[str, PublisherConfig]:
             raise ValidationError(f"Publisher config for {target} must be an object")
 
         mode = str(raw_config.get("mode", raw_config.get("publish", "copy"))).strip().lower()
-        if mode not in {"copy", "command", "manual", "openai-skills", "claude-agent", "claude-skills", "codex-skills"}:
+        if mode not in {"copy", "command", "manual", "openai-skills", "claude-agent", "claude-skills", "codex-skills", "grok-skills"}:
             raise ValidationError(
-                f"Publisher mode for {target} must be copy, command, manual, openai-skills, claude-agent, claude-skills, or codex-skills"
+                f"Publisher mode for {target} must be copy, command, manual, openai-skills, claude-agent, claude-skills, codex-skills, or grok-skills"
             )
 
         install_root = None
@@ -1129,6 +1152,12 @@ def preflight_publish_target(
             ensure_writable_directory(install_root, f"{target} skills root")
         return mode, f"skills root(s) {format_path_list(install_roots)}"
 
+    if mode == "grok-skills":
+        install_roots = resolve_grok_skills_roots(target, install_paths, config)
+        for install_root in install_roots:
+            ensure_writable_directory(install_root, f"{target} skills root")
+        return mode, f"skills root(s) {format_path_list(install_roots)}"
+
     raise ValidationError(f"{target}: unsupported publish mode {mode}")
 
 
@@ -1259,6 +1288,19 @@ def render_codex_skill_markdown(family: Family, skill: Skill, target: str) -> st
     )
 
 
+def render_grok_skill_markdown(family: Family, skill: Skill, target: str) -> str:
+    return "\n".join(
+        [
+            f"# {grok_skill_name(family, skill)}",
+            "",
+            f"Description: {skill.description}",
+            "",
+            strip_leading_h1(get_target_body(skill, target)),
+            "",
+        ]
+    )
+
+
 def render_chatgpt_work_install_guide(family: Family, skills: list[Skill]) -> str:
     lines = [
         f"# ChatGPT Work Manual Build - {family.name}",
@@ -1365,6 +1407,83 @@ def publish_claude_skills(
         destination=state_path,
         publish_result=f"installed {installed_count} Claude skill(s) into {format_path_list(install_roots)}; state {state_path}",
         verification_result=f"verified {installed_count} Claude skill(s) across {len(install_roots)} root(s)",
+        rollback_mode="skills_restore",
+        backup_path=backup_root,
+        had_existing_destination=any_existing_destination,
+    )
+
+
+def publish_grok_skills(
+    bundle_dir: Path,
+    target: str,
+    family: Family,
+    skills: list[Skill],
+    install_paths: dict[str, Path],
+    history_dir: Path,
+    config: PublisherConfig | None,
+    backup_root: Path,
+) -> PublishResult:
+    install_roots = resolve_grok_skills_roots(target, install_paths, config)
+    state_path = state_file(history_dir, f"grok-skills-{target}-{family.name}")
+    installed_skills: dict[str, dict[str, object]] = {}
+    installed_count = 0
+    touched_destinations: list[tuple[Path, bool]] = []
+    any_existing_destination = False
+
+    try:
+        for skill in skills:
+            if target not in skill.targets:
+                continue
+            skill_name = grok_skill_name(family, skill)
+            installations: list[dict[str, object]] = []
+            for install_root in install_roots:
+                destination = install_root / skill_name
+                try:
+                    had_existing_destination, _ = backup_existing_destination(backup_root, destination)
+                    any_existing_destination = any_existing_destination or had_existing_destination
+                    touched_destinations.append((destination, had_existing_destination))
+                    destination.mkdir(parents=True, exist_ok=True)
+                    write_text(destination / "SKILL.md", render_grok_skill_markdown(family, skill, target))
+                except PermissionError as exc:
+                    raise ValidationError(
+                        f"Cannot install Grok skill {skill_name} into {destination}. "
+                        "The deploy process needs write permission to Grok's skills directory. "
+                        "Use --install-path, set a Grok install root env var, or run locally with sufficient permissions."
+                    ) from exc
+                installations.append(
+                    {
+                        "destination": str(destination),
+                        "had_existing_destination": had_existing_destination,
+                    }
+                )
+            installed_skills[skill.skill_id] = {
+                "skill_name": skill_name,
+                "installations": installations,
+            }
+            installed_count += 1
+    except Exception:
+        for destination, had_existing_destination in reversed(touched_destinations):
+            restore_destination_from_backup(destination, had_existing_destination, backup_root)
+        raise
+
+    write_json(
+        state_path,
+        {
+            "target": target,
+            "family": family.name,
+            "skills_roots": [str(root) for root in install_roots],
+            "skills": installed_skills,
+            "backup_root": str(backup_root),
+            "updated_at": datetime.now(timezone.utc).isoformat(),
+        },
+    )
+    return PublishResult(
+        target=target,
+        mode="grok-skills",
+        bundle_dir=bundle_dir,
+        destination=state_path,
+        publish_result=f"installed {installed_count} Grok skill(s) into {format_path_list(install_roots)}; state {state_path}",
+        verification_result=f"verified {installed_count} Grok skill(s) across {len(install_roots)} root(s)",
         rollback_mode="skills_restore",
         backup_path=backup_root,
         had_existing_destination=any_existing_destination,
@@ -1698,6 +1817,9 @@ def publish_with_rollback(
 
     if config.mode == "codex-skills":
         return publish_codex_skills(bundle_dir, target, family, skills, install_paths, history_dir, config, backup_root / target)
+
+    if config.mode == "grok-skills":
+        return publish_grok_skills(bundle_dir, target, family, skills, install_paths, history_dir, config, backup_root / target)
 
     if config.mode == "copy":
         destination, backup_path, had_existing_destination = publish_copy(

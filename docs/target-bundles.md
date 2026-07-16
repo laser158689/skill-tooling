@@ -1,6 +1,6 @@
 # Target Folders
 
-`skill-tooling` generates one top-level folder per target. By default these folders are written directly into the family repo.
+`skill-tooling` generates one folder per target under `dist/` inside the family repo by default.
 
 Example:
 
@@ -60,6 +60,9 @@ Publishers are configured per target in JSON:
 ```json
 {
   "targets": {
+    "grok": {
+      "mode": "grok-skills"
+    },
     "openai-skills-api": {
       "mode": "openai-skills",
       "api_key_env": "OPENAI_API_KEY"
@@ -87,6 +90,8 @@ Publishers are configured per target in JSON:
 
 `claude-agent` publishes the generated family bundle as a hosted Claude agent and stores the agent id/version under `.skill-tooling/deployments/state/`.
 
+`grok-skills` installs one local Grok skill directory per source skill under `~/.grok/skills` by default, or into an explicit target install root when configured.
+
 `claude-skills` installs one local Claude skill directory per source skill under Claude's documented skills directory.
 
 `codex-skills` installs one local Codex skill directory per source skill. Explicit roots from `--install-path codex=...`, `install_root`, `SKILL_TOOLING_CODEX_INSTALL_ROOT`, or `CODEX_HOME` are honored as single-root installs. Without an explicit root, the publisher installs to `$HOME/.agents/skills` and also updates `$HOME/.codex/skills` when that legacy/current-session directory already exists.
@@ -95,7 +100,7 @@ Publishers are configured per target in JSON:
 
 Every deploy writes a receipt JSON file under `.skill-tooling/deployments/receipts/` by default for local source deploys, or under the configured `--history-dir`.
 
-For copy-based publishers, deploy also stores enough information to roll back the previously published destination.
+For copy-based publishers and built-in local skill publishers, deploy also stores enough information to roll back the previously published destination.
 
 Support command:
 
