@@ -72,9 +72,19 @@ See [docs/family-repo-contract.md](docs/family-repo-contract.md) for the full co
 If an LLM needs the exact authoring rules, start with [docs/llm-authoring-contract.md](docs/llm-authoring-contract.md).
 The family manifest schema is documented in [docs/family-schema.md](docs/family-schema.md) and published as [schemas/family.schema.json](schemas/family.schema.json).
 A machine-readable schema for source skill frontmatter is published as [schemas/source-skill-frontmatter.schema.json](schemas/source-skill-frontmatter.schema.json).
-A project-level status and architecture summary lives in [docs/project-state.md](docs/project-state.md).
-The current deployment workflow is summarized in [docs/deployment-matrix.md](docs/deployment-matrix.md).
-A consolidated current-state, gaps, and work-plan document lives in [docs/status-and-plan.md](docs/status-and-plan.md).
+The canonical architecture doc set lives here:
+
+- [docs/CURRENT_STATE.md](docs/CURRENT_STATE.md)
+- [docs/TARGET_STATE.md](docs/TARGET_STATE.md)
+- [docs/GAPS.md](docs/GAPS.md)
+- [docs/ROADMAP.md](docs/ROADMAP.md)
+- [docs/DEPLOYMENT_MATRIX.md](docs/DEPLOYMENT_MATRIX.md)
+
+Older summary docs remain only as pointers:
+
+- [docs/project-state.md](docs/project-state.md)
+- [docs/status-and-plan.md](docs/status-and-plan.md)
+- [docs/deployment-matrix.md](docs/deployment-matrix.md)
 
 ## Primary Commands
 
