@@ -205,6 +205,13 @@ class ValidationError(RuntimeError):
     """Raised when a family repository is structurally invalid."""
 
 
+ANSI_RESET = "\033[0m"
+ANSI_BOLD = "\033[1m"
+ANSI_GREEN = "\033[32m"
+ANSI_YELLOW = "\033[33m"
+ANSI_RED = "\033[31m"
+
+
 @dataclass(frozen=True)
 class Family:
     name: str
@@ -264,6 +271,55 @@ class PublishResult:
     backup_path: Path | None = None
     had_existing_destination: bool = False
     rollback_command: list[str] | None = None
+
+
+def color_output_enabled() -> bool:
+    if os.environ.get("NO_COLOR"):
+        return False
+    return sys.stdout.isatty()
+
+
+def style_text(text: str, *codes: str) -> str:
+    if not codes or not color_output_enabled():
+        return text
+    return f"{''.join(codes)}{text}{ANSI_RESET}"
+
+
+def wrap_text(text: str, width: int) -> list[str]:
+    if width <= 0:
+        return [text]
+    words = text.split()
+    if not words:
+        return [""]
+
+    lines: list[str] = []
+    current = words[0]
+    for word in words[1:]:
+        candidate = f"{current} {word}"
+        if len(candidate) <= width:
+            current = candidate
+        else:
+            lines.append(current)
+            current = word
+    lines.append(current)
+    return lines
+
+
+def format_boxed_notice(title: str, lines: list[str]) -> list[str]:
+    wrapped_lines: list[str] = []
+    for line in lines:
+        wrapped_lines.extend(wrap_text(line, 88))
+    width = max(len(title), *(len(line) for line in wrapped_lines))
+    border = "=" * width
+    output = [
+        style_text(border, ANSI_BOLD, ANSI_YELLOW),
+        style_text(title, ANSI_BOLD, ANSI_YELLOW),
+        style_text(border, ANSI_BOLD, ANSI_YELLOW),
+    ]
+    for line in wrapped_lines:
+        output.append(style_text(line, ANSI_YELLOW))
+    output.append(style_text(border, ANSI_BOLD, ANSI_YELLOW))
+    return output
 
 
 def canonicalize_target(target: str) -> str:
@@ -1347,6 +1403,11 @@ def manual_follow_up_message(target: str, result: PublishResult) -> str | None:
     return f"Manual next step required: complete installation using the generated bundle at {result.bundle_dir}."
 
 
+def manual_follow_up_lines(target: str, result: PublishResult) -> list[str]:
+    message = manual_follow_up_message(target, result)
+    return [message] if message else []
+
+
 def publish_claude_skills(
     bundle_dir: Path,
     target: str,
@@ -2225,6 +2286,7 @@ def deploy_family_repo(args: argparse.Namespace) -> int:
                 print(f"- {target}: {mode} | {detail}")
 
         receipt_targets: list[dict] = []
+        manual_follow_up_targets: list[tuple[str, list[str]]] = []
 
         for target in selected_targets:
             bundle_dir = render_target_bundle(output_root, family, skills, target)
@@ -2245,9 +2307,11 @@ def deploy_family_repo(args: argparse.Namespace) -> int:
                 receipt_targets.append(publish_result_to_dict(result))
                 print(f"  Deployed to {TARGET_DISPLAY_NAMES.get(target, target)}: {result.publish_result}")
                 print(f"  Verified {target}: {result.verification_result}")
-                follow_up = manual_follow_up_message(target, result)
-                if follow_up:
-                    print(f"  {follow_up}")
+                follow_up_lines = manual_follow_up_lines(target, result)
+                if follow_up_lines:
+                    manual_follow_up_targets.append((target, follow_up_lines))
+                    for line in format_boxed_notice("MANUAL NEXT STEP REQUIRED", follow_up_lines):
+                        print(f"  {line}")
             else:
                 receipt_targets.append(
                     {
@@ -2263,6 +2327,18 @@ def deploy_family_repo(args: argparse.Namespace) -> int:
 
         if publish_requested:
             print(f"Published targets: {', '.join(selected_targets)}")
+            if manual_follow_up_targets:
+                print("")
+                summary_title = "MANUAL FOLLOW-UP SUMMARY"
+                summary_lines: list[str] = []
+                for target, lines in manual_follow_up_targets:
+                    summary_lines.append(f"{TARGET_DISPLAY_NAMES.get(target, target)}:")
+                    summary_lines.extend(lines)
+                    summary_lines.append("")
+                if summary_lines and summary_lines[-1] == "":
+                    summary_lines.pop()
+                for line in format_boxed_notice(summary_title, summary_lines):
+                    print(line)
         else:
             print(
                 "Generated target bundles only. Nothing was published. "
