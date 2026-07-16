@@ -52,6 +52,9 @@ If a generated tool directory is changed by hand, the next deploy will overwrite
 }
 ```
 
+`family.json` is the required canonical filename for every family repo.
+Repo-specific manifest filenames like `FH-Coaches.yml` are not part of the current contract.
+
 Rules:
 
 - `skill_family.name` must be a lowercase slug using letters, numbers, and hyphens.

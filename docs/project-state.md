@@ -46,6 +46,7 @@ It contains:
 - Schema:
   - [schemas/family.schema.json](/Users/brianraney/Documents/GitHub/skill-tooling/schemas/family.schema.json)
 - Example publisher config:
+  - [publish-config.json](/Users/brianraney/Documents/GitHub/skill-tooling/publish-config.json)
   - [examples/publish-config.json](/Users/brianraney/Documents/GitHub/skill-tooling/examples/publish-config.json)
 - Smoke test and CI:
   - [tests/smoke.sh](/Users/brianraney/Documents/GitHub/skill-tooling/tests/smoke.sh)
@@ -88,6 +89,7 @@ Current commands:
   - Generates target folders
   - Performs validation as part of deployment
   - Can publish generated folders via copy-based, command-based, and selected built-in publishers
+  - Can optionally stage, commit, push, open a PR, and merge for local source repos
   - Can operate on a local repo with `--source`
   - Can clone a repo with `--repo`
 
@@ -129,20 +131,27 @@ The current implementation is a Python CLI with shell wrappers.
 Runtime assumptions:
 
 - Python 3 is available
+- Poetry metadata is the source of truth for Python version and future library changes
 - `git` is available
 - The local machine or CI runner has filesystem access to any copy-publish roots
 - Any `command` publishers refer to locally installed wrapper commands or scripts
 - OpenAI hosted publishing requires an API key
 - Codex local publishing defaults to `$CODEX_HOME/skills`
 - Claude hosted publishing requires the Anthropic CLI on the runner
-- Deploy auto-loads `.env` / `.skill-tooling.env` files from the working directory and source repo
-- Repo-based deploys intentionally do not trust `.env` files from cloned family repos
+- Deploy auto-loads `.env` / `.skill-tooling.env` from the `skill-tooling` repo by default
+- Any non-default env file must be explicitly selected with `SKILL_TOOLING_ENV_FILE`
 
 Today this can reasonably run:
 
 - Locally on a developer machine
 - In GitHub Actions
 - In any CI or automation runner with Python 3 and git
+
+Dependency management expectations:
+
+- Runtime and library declarations belong in [pyproject.toml](/Users/brianraney/Documents/GitHub/skill-tooling/pyproject.toml)
+- Dependency resolution output belongs in `poetry.lock`
+- Any new third-party Python library should be added through Poetry so the lock file stays authoritative
 
 It is not intended to require:
 
@@ -360,7 +369,7 @@ Fix:
 
 Current state:
 
-- Local `.env` loading is supported for trusted local use
+- Local `.env` loading is supported only from the `skill-tooling` repo by default
 - `.env` files are meant to stay out of git
 - Inline API keys in publish config are not supported
 

@@ -4,17 +4,22 @@ This table describes the current end-to-end deployment flow for `skill-tooling`,
 
 | Deployment Step | Current State |
 |---|---|
-| Load publish config from `--config` or `SKILL_TOOLING_CONFIG` | Real tooling |
-| Load local secrets/config from `SKILL_TOOLING_ENV_FILE`, `.env`, or `.skill-tooling.env` | Real tooling |
+| Load publish config from `--config`, `SKILL_TOOLING_CONFIG`, or default `publish-config.json` discovery | Real tooling |
+| Load local secrets/config from the default `skill-tooling/.env` or explicit `SKILL_TOOLING_ENV_FILE` override | Real tooling |
 | Restrict `.env` loading to an allowlist of deployment-related keys | Real tooling |
 | Ignore `.env` files in git and fail CI if they are tracked | Real tooling |
 | Clone repo for `--repo owner/family` deploys | Real tooling |
 | Refuse insecure `http://` git URLs | Real tooling |
-| Do not load `.env` from cloned family repos | Real tooling |
+| Do not implicitly load `.env` from family repos or the current working directory | Real tooling |
 | Validate `family.json` schema | Real tooling |
 | Discover skills from `source/*.md` | Real tooling |
 | Load target overrides from `overrides/<skill-id>/<target>.md` | Real tooling |
 | Generate per-target output folders (`grok/`, `claude/`, `codex/`, etc.) | Real tooling |
+| Stage repo changes after deploy (`--git`) | Real tooling |
+| Commit repo changes after deploy | Real tooling |
+| Push release branch after deploy (`--push`) | Real tooling |
+| Open a pull request after deploy (`--open-pr`) | Real tooling |
+| Merge a pull request after deploy (`--merge-pr`) | Real tooling |
 | Publish `openai-chatgpt` via hosted OpenAI Skills API | Real tooling |
 | Publish `codex` via local `$CODEX_HOME/skills` install | Real tooling |
 | Publish `claude` via `ant beta:agents` | Real tooling |
@@ -45,5 +50,5 @@ Currently supported local env keys:
 ## Notes
 
 - `publish-config.json` should reference env var names like `OPENAI_API_KEY`, not contain inline secrets.
-- For local trusted family repos, `.env` can supply deployment settings such as `CODEX_HOME`.
-- For repo-based deploys using `--repo`, cloned `.env` files are intentionally ignored.
+- The default implicit env file is the one in the `skill-tooling` repo.
+- Use `SKILL_TOOLING_ENV_FILE` only when you intentionally want to override that default.

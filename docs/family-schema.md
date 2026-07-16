@@ -4,7 +4,10 @@ The family manifest has an explicit schema at [schemas/family.schema.json](../sc
 
 That schema defines the data model for the family definition regardless of whether you think about it as JSON or YAML.
 
-Today, the tooling reads `family.json`, but the schema is the contract either way.
+The canonical manifest filename is `family.json`.
+
+The tooling does not currently support repo-named manifests such as `FH-Coaches.yml`.
+Using one fixed filename keeps family repos consistent and makes validation and deployment simpler.
 
 ## Current Shape
 
