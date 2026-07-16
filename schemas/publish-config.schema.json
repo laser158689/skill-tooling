@@ -1,0 +1,61 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://example.com/skill-tooling/publish-config.schema.json",
+  "title": "Skill Tooling Publish Config",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["targets"],
+  "properties": {
+    "targets": {
+      "type": "object",
+      "additionalProperties": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["mode"],
+        "properties": {
+          "mode": {
+            "type": "string",
+            "enum": ["copy", "command", "openai-skills", "claude-agent", "codex-skills"]
+          },
+          "install_root": {
+            "type": "string"
+          },
+          "command": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "verify_command": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "rollback_command": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "api_key_env": {
+            "type": "string"
+          },
+          "base_url": {
+            "type": "string"
+          },
+          "cli_path": {
+            "type": "string"
+          },
+          "model": {
+            "type": "string"
+          },
+          "tool": {
+            "type": "string"
+          }
+        }
+      },
+      "description": "Map of target id to publisher configuration."
+    }
+  }
+}

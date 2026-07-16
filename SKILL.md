@@ -1,24 +1,31 @@
 ---
 name: skill-tooling
-description: The skill-tooling family provides the core commands for creating and deploying skill families in the universal skill repository and deployer system. It includes skill-deploy and create-family.
+description: Tooling for scaffolding, validating, generating, and publishing external skill family repositories into multiple AI target ecosystems.
 ---
 
-# skill-tooling Family
+# skill-tooling
 
-This family contains the operational tooling for the universal skill system.
+## Role
 
-## Scripts
-- `skill-deploy` — Deploy a family from its GitHub master repo into Grok (and generate Codex output)
-- `create-family` — Scaffold a brand new skill family with proper structure and local git initialization
+`skill-tooling` is the operational layer for a multi-target skill ecosystem.
 
-## Usage
-These scripts are meant to be run from the master repo after it has been deployed, or directly during development.
+It is not the canonical home of all skills. Instead, each family lives in its own repo, authors canonical skill files in `source/`, and uses this tooling to generate top-level target folders like `grok/`, `claude/`, and `codex/`.
 
-## Master Location
-This family lives in its own GitHub repository: `skill-tooling`
+## Commands
 
-## Deployment
-Deploy this family itself using:
-```bash
-bash skill-deploy --repo YOUR_USERNAME/skill-tooling
-```
+- `create-family` scaffolds a family repo with `source/`, `overrides/`, and generated target folder slots.
+- `validate-family` validates family metadata, source files, and optional overrides.
+- `skill-deploy` can read a local family repo or clone one from Git, generate target folders, and publish them through configured adapters.
+
+## Publishing Model
+
+Deployment is adapter-based.
+
+- Copy publishers install generated target folders into configured filesystem roots.
+- Command publishers hand those target folders to local wrapper commands for tool-specific integration.
+
+## Ownership Model
+
+- `source/` is canonical authored content.
+- `overrides/` is optional authored target-specific content.
+- Top-level target folders are generated artifacts and manual deployment views.

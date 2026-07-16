@@ -1,8 +1,194 @@
 # skill-tooling
 
-Master repository for the **skill-tooling** family.
+`skill-tooling` is the central tooling repository for managing skill families that live in their own Git repositories.
 
-This repo contains the core scripts that power the universal skill repository and deployer:
+It does two primary things:
 
-- `skill-deploy` — Main deployment command
-- `create-family` — Scaffolds new skill families
+- Scaffolds a new family repository.
+- Generates and publishes tool-specific views for Grok, Grok Build, Claude, Claude Code, OpenAI/ChatGPT, Codex, and future targets.
+
+Validation is part of deployment. You do not need to run a server or keep background infrastructure running.
+
+## Operating Model
+
+- `skill-tooling` is the shared tooling repo.
+- Each skill family lives in its own repo.
+- `source/` contains the canonical authored skills.
+- Top-level tool folders like `grok/`, `claude/`, and `codex/` are generated outputs.
+- `overrides/` is optional and only used when one tool needs different text for a specific skill.
+
+## Family Repository Contract
+
+Every family repository follows this shape:
+
+```text
+my-family/
+  family.json
+  source/
+    orchestrator.md
+    researcher.md
+  overrides/
+    orchestrator/
+      claude.md
+  grok/
+  claude/
+  codex/
+```
+
+The important ownership rule is simple:
+
+- Humans edit `source/*.md`
+- Humans optionally edit `overrides/<skill-id>/<target>.md`
+- `skill-tooling` rewrites the top-level tool directories
+
+See [docs/family-repo-contract.md](docs/family-repo-contract.md) for the full contract.
+The family manifest schema is documented in [docs/family-schema.md](docs/family-schema.md) and published as [schemas/family.schema.json](schemas/family.schema.json).
+A project-level status and architecture summary lives in [docs/project-state.md](docs/project-state.md).
+The current deployment workflow is summarized in [docs/deployment-matrix.md](docs/deployment-matrix.md).
+
+## Primary Commands
+
+- `scripts/create-family` scaffolds a new family repository.
+- `scripts/skill-deploy` validates, generates tool folders, and optionally publishes them.
+
+There is also `scripts/validate-family`, but it is a support command. The intended day-to-day workflow is just `create-family` and `skill-deploy`.
+
+## Quick Start
+
+Create a new family repo:
+
+```bash
+scripts/create-family customer-support "Reusable support skills for customer support teams" --path /tmp
+```
+
+Generate tool-specific folders directly inside the family repo:
+
+```bash
+scripts/skill-deploy --source /tmp/customer-support
+```
+
+Publish every configured tool from a repo in one command:
+
+```bash
+scripts/skill-deploy \
+  --repo your-org/customer-support \
+  --publish \
+  --config examples/publish-config.json
+```
+
+That is the intended operating model:
+
+1. Run `create-family` once to start a family.
+2. Edit the skill files in `source/`.
+3. Run `skill-deploy` whenever you want validation, generation, and publish.
+
+Every deploy also writes a receipt under `.skill-tooling/deployments/` by default so publish results are auditable and copy-based publishes can be rolled back.
+
+If you want the generated tool folders somewhere else, override the output root:
+
+```bash
+scripts/skill-deploy --source /tmp/customer-support --output /tmp/customer-support-build
+```
+
+## Publishing
+
+Publishing is adapter-based.
+
+- `copy` publishers copy a generated tool folder into a configured install root.
+- `command` publishers run a target-specific local command with bundle metadata.
+- `openai-skills` creates or updates hosted OpenAI skills, one per `source/*.md` skill.
+- `claude-agent` creates or updates a hosted Claude agent from the generated family bundle.
+- `codex-skills` installs one local Codex skill directory per `source/*.md` skill.
+
+The publish config format is shown in [examples/publish-config.json](examples/publish-config.json).
+
+Supported template variables for `command` publishers:
+
+- `{bundle_dir}`
+- `{family_name}`
+- `{target}`
+- `{source}`
+- `{source_descriptor}`
+- `{output_root}`
+- `{destination}` for verify commands when a publish destination exists
+
+Optional publisher fields:
+
+- `verify_command`
+- `rollback_command`
+- `api_key_env` for API-based publishers
+- `base_url` for API-based publishers when you need a non-default endpoint
+- `cli_path`, `model`, and `tool` for Claude agent publishing
+
+Current adapter status:
+
+- `openai-chatgpt` has a built-in hosted publisher via `openai-skills`.
+- `codex` has a built-in local publisher via `codex-skills`.
+- `claude` has a built-in hosted publisher via `claude-agent`.
+- `grok`, `grok-build`, and `claude-code` still depend on local wrapper commands or copy-based/manual flows.
+- Generated target folders remain the manual fallback artifacts for every target.
+
+## Credentials And Environment
+
+Deploy auto-loads environment variables from:
+
+- `SKILL_TOOLING_ENV_FILE` if set
+- `.env` in the current working directory
+- `.skill-tooling.env` in the current working directory
+- `.env` in the source family repo
+- `.skill-tooling.env` in the source family repo
+
+Existing shell environment variables win over `.env` values.
+
+Security rules:
+
+- `.env` files are for local secrets only and are git-ignored.
+- Secrets should not be stored in `publish-config.json`.
+- Repo-based deploys do not load `.env` from the cloned family repo.
+- `.env` loading only accepts a small allowlist of deployment-related keys.
+
+Typical variables:
+
+- `OPENAI_API_KEY` for `openai-skills`
+- `ANTHROPIC_API_KEY` for the `ant` CLI when you enable `claude-agent`
+- `CODEX_HOME` for `codex-skills`
+- `SKILL_TOOLING_CONFIG` for a default publish config path
+
+Starter values are shown in [examples/.env.example](examples/.env.example).
+
+## Installation Roots
+
+Copy-based publishing installs each generated tool folder to `<install-root>/<family-name>/`.
+
+You can provide install roots with repeated `--install-path` flags:
+
+```bash
+scripts/skill-deploy \
+  --source /tmp/customer-support \
+  --publish \
+  --install-path grok=/srv/grok/skills \
+  --install-path codex=/srv/codex/skills
+```
+
+You can also use environment variables for copy-based publishers:
+
+- `SKILL_TOOLING_GROK_INSTALL_ROOT`
+- `SKILL_TOOLING_GROK_BUILD_INSTALL_ROOT`
+- `SKILL_TOOLING_CLAUDE_INSTALL_ROOT`
+- `SKILL_TOOLING_CLAUDE_CODE_INSTALL_ROOT`
+- `SKILL_TOOLING_OPENAI_CHATGPT_INSTALL_ROOT`
+- `SKILL_TOOLING_CODEX_INSTALL_ROOT`
+
+## Targets
+
+Current targets:
+
+- `grok`
+- `grok-build`
+- `claude`
+- `claude-code`
+- `openai-chatgpt`
+- `codex`
+
+The generated folder shapes are documented in [docs/target-bundles.md](docs/target-bundles.md).
+The publish config schema is published as [schemas/publish-config.schema.json](schemas/publish-config.schema.json).
