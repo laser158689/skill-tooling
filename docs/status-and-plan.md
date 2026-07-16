@@ -147,23 +147,24 @@ The intended deployment outcome is:
 
 ## WIP
 
-Current in-progress changes in the working tree:
+There is no active in-repo contract migration in progress right now.
+
+The major cleanup items from the last phase are already committed and merged:
 
 - removed the non-required `overrides/` concept from the contract and code
 - migrated generated family outputs from root-level target folders to `dist/<target>/`
 - added `chatgpt-work` as a standard generated manual deployable target
+- added built-in local Grok publishing via `grok-skills`
+- added rollback support for built-in local Grok, Claude, and Codex skill publishers
 - migrated `FH-Coaches` to the new contract
 
-These changes are implemented locally and smoke-tested, but they are not yet documented as a committed, merged release.
+The remaining work is now product-gap work, not contract-cleanup work.
 
 ## Prioritized Work Plan
 
 ### P0
 
-1. Commit and merge the contract cleanup.
-   The repo should not keep drifting between root-level generated folders, `dist/`, and the removed `overrides/` concept.
-
-2. Keep the OpenAI target map honest.
+1. Keep the OpenAI target map honest.
    `openai-skills-api` is real.
    `chatgpt-work` is manual.
    No undocumented ChatGPT Work publisher should be added.
@@ -210,6 +211,6 @@ These changes are implemented locally and smoke-tested, but they are not yet doc
 
 The highest-value next move is to make the target list truthful in practice, not just in documentation:
 
-1. commit and merge the `dist/` plus no-`overrides/` contract cleanup
-2. decide whether `FH-Coaches` should publish Grok targets into your real `~/.grok/skills` environment or stay generated-only for now
+1. decide whether `FH-Coaches` should publish Grok targets into your real `~/.grok/skills` environment or stay generated-only for now
+2. implement hosted/API rollback for `openai-skills` and `claude-agent`
 3. keep `openai-skills-api` and `chatgpt-work` explicitly separated until a documented creation API exists
