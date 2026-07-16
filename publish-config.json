@@ -6,8 +6,11 @@
     "grok-build": {
       "mode": "grok-skills"
     },
-    "claude": {
+    "claude-local": {
       "mode": "claude-skills"
+    },
+    "claude-ai": {
+      "mode": "manual"
     },
     "claude-code": {
       "mode": "claude-skills"

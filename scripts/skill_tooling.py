@@ -26,7 +26,8 @@ from typing import Iterable
 TARGET_INSTALL_ENV = {
     "grok": "SKILL_TOOLING_GROK_INSTALL_ROOT",
     "grok-build": "SKILL_TOOLING_GROK_BUILD_INSTALL_ROOT",
-    "claude": "SKILL_TOOLING_CLAUDE_INSTALL_ROOT",
+    "claude-local": "SKILL_TOOLING_CLAUDE_LOCAL_INSTALL_ROOT",
+    "claude-ai": "SKILL_TOOLING_CLAUDE_AI_INSTALL_ROOT",
     "claude-code": "SKILL_TOOLING_CLAUDE_CODE_INSTALL_ROOT",
     "openai-skills-api": "SKILL_TOOLING_OPENAI_SKILLS_API_INSTALL_ROOT",
     "chatgpt-work": "SKILL_TOOLING_CHATGPT_WORK_INSTALL_ROOT",
@@ -39,7 +40,8 @@ TARGET_ALIASES = {
     "openai": "openai-skills-api",
     "openai-skills": "openai-skills-api",
     "openai-skills-api": "openai-skills-api",
-    "claude": "claude",
+    "claude-local": "claude-local",
+    "claude-ai": "claude-ai",
     "claude-code": "claude-code",
     "grok": "grok",
     "grok-build": "grok-build",
@@ -49,7 +51,8 @@ TARGET_ALIASES = {
 TARGET_FILE_EXTENSIONS = {
     "grok": ".grok",
     "grok-build": ".grokbuild",
-    "claude": ".skill",
+    "claude-local": ".skill",
+    "claude-ai": ".skill",
     "claude-code": ".skill",
     "openai-skills-api": ".prompt",
     "chatgpt-work": ".prompt",
@@ -59,7 +62,8 @@ TARGET_FILE_EXTENSIONS = {
 SUPPORTED_TARGETS = [
     "grok",
     "grok-build",
-    "claude",
+    "claude-local",
+    "claude-ai",
     "claude-code",
     "openai-skills-api",
     "chatgpt-work",
@@ -69,7 +73,8 @@ SUPPORTED_TARGETS = [
 DEFAULT_TARGETS = [
     "grok",
     "grok-build",
-    "claude",
+    "claude-local",
+    "claude-ai",
     "claude-code",
     "openai-skills-api",
     "chatgpt-work",
@@ -78,7 +83,8 @@ DEFAULT_TARGETS = [
 TARGET_DISPLAY_NAMES = {
     "grok": "Grok",
     "grok-build": "Grok Build",
-    "claude": "Claude",
+    "claude-local": "Claude Local",
+    "claude-ai": "Claude AI",
     "claude-code": "Claude Code",
     "openai-skills-api": "OpenAI Skills API",
     "chatgpt-work": "ChatGPT Work",
@@ -94,6 +100,7 @@ ALLOWED_DOTENV_KEYS = {
     "OPENAI_API_KEY",
     "SKILL_TOOLING_CONFIG",
     "SKILL_TOOLING_ENV_FILE",
+    "CLAUDE_CONFIG_DIR",
     *TARGET_INSTALL_ENV.values(),
 }
 
@@ -326,6 +333,11 @@ def canonicalize_target(target: str) -> str:
     normalized = target.strip().lower()
     if normalized == "all":
         return normalized
+    if normalized == "claude":
+        raise ValidationError(
+            "Target `claude` has been split. Use `claude-local` for the local file-based install surface or "
+            "`claude-ai` for the Claude Desktop / claude.ai Skills surface."
+        )
     if normalized not in TARGET_ALIASES:
         raise ValidationError(f"Unsupported target: {target}")
     return TARGET_ALIASES[normalized]
@@ -559,6 +571,12 @@ def load_manifest(source: Path) -> Family:
             f"{manifest_path} uses deprecated target `openai-chatgpt`. "
             "Rename it to `openai-skills-api`. "
             "`chatgpt-work` is now treated as a separate product surface."
+        )
+    if isinstance(raw_targets, list) and "claude" in raw_targets:
+        raise ValidationError(
+            f"{manifest_path} uses deprecated target `claude`. "
+            "Rename it to `claude-local` for the local file-based install surface or "
+            "`claude-ai` for the Claude Desktop / claude.ai Skills surface."
         )
 
     validate_against_schema(manifest, FAMILY_MANIFEST_SCHEMA)
@@ -989,6 +1007,8 @@ def render_target_bundle(output_root: Path, family: Family, skills: list[Skill],
         write_text(bundle_dir / f"{skill.skill_id}{ext}", render_target_skill_text(family, skill, target))
     if target == "chatgpt-work":
         write_text(bundle_dir / "INSTALL.md", render_chatgpt_work_install_guide(family, target_skills))
+    if target == "claude-ai":
+        write_text(bundle_dir / "INSTALL.md", render_claude_ai_install_guide(family, target_skills))
 
     return bundle_dir
 
@@ -1379,6 +1399,33 @@ def render_chatgpt_work_install_guide(family: Family, skills: list[Skill]) -> st
     return "\n".join(lines)
 
 
+def render_claude_ai_install_guide(family: Family, skills: list[Skill]) -> str:
+    lines = [
+        f"# Claude AI Manual Build - {family.name}",
+        "",
+        "This target does not have a built-in cloud publisher in `skill-tooling`.",
+        "Use the generated `.skill` files in this directory to create or import Claude skills manually in Claude Desktop or claude.ai.",
+        "",
+        "Important:",
+        "",
+        "- `claude-local` installs files under `~/.claude/skills`, but that does not make them appear automatically in the Claude Desktop / claude.ai Skills UI.",
+        "- Treat this directory as the manual handoff bundle for Claude's visible Skills product surface.",
+        "",
+        "Recommended flow:",
+        "",
+        "1. Open Claude Desktop or claude.ai and go to the Skills interface.",
+        "2. Create or import one Claude skill per generated `.skill` file.",
+        "3. Use `family.skill` only as a family-level reference, not as a replacement for the per-skill files.",
+        "",
+        "Generated skills:",
+        "",
+    ]
+    for skill in skills:
+        lines.append(f"- `{skill.skill_id}.skill`")
+    lines.append("")
+    return "\n".join(lines)
+
+
 def publish_manual_bundle(bundle_dir: Path, target: str) -> PublishResult:
     destination = bundle_dir / "INSTALL.md"
     return PublishResult(
@@ -1399,6 +1446,11 @@ def manual_follow_up_message(target: str, result: PublishResult) -> str | None:
         return (
             "Manual next step required: open ChatGPT Work, create one skill per generated `.prompt` file, "
             f"and follow {result.destination}."
+        )
+    if target == "claude-ai":
+        return (
+            "Manual next step required: open Claude Desktop or claude.ai, create or import one skill per generated "
+            f"`.skill` file, and follow {result.destination}."
         )
     return f"Manual next step required: complete installation using the generated bundle at {result.bundle_dir}."
 
@@ -2155,7 +2207,9 @@ def create_family_repo(args: argparse.Namespace) -> int:
             f"    {orchestrator_id}.md",
             "  dist/",
             "    grok/",
-            "    claude/",
+            "    claude-local/",
+            "    claude-ai/",
+            "    claude-code/",
             "    openai-skills-api/",
             "    chatgpt-work/",
             "    codex/",
