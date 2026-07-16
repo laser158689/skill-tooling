@@ -1,0 +1,10 @@
+.env
+.env.*
+!.env.example
+!.env.sample
+.skill-tooling.env
+.skill-tooling.env.*
+!.skill-tooling.env.example
+.skill-tooling/
+__pycache__/
+*.pyc

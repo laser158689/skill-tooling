@@ -12,21 +12,36 @@ jobs:
     steps:
     - uses: actions/checkout@v4
 
-    - name: Run shellcheck on scripts
-      run: |
-        shellcheck scripts/skill-deploy || true
-        shellcheck scripts/create-family || true
+    - name: Set up Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: "3.12"
 
-    - name: Validate SKILL.md structure
+    - name: Verify script syntax
       run: |
-        if [ ! -f SKILL.md ]; then
-          echo "SKILL.md is missing"
-          exit 1
-        fi
-        echo "SKILL.md found"
+        bash -n scripts/create-family
+        bash -n scripts/skill-deploy
+        bash -n scripts/validate-family
+        bash -n scripts/rollback-deploy
+        bash -n tests/smoke.sh
+        python3 -m py_compile scripts/skill_tooling.py
 
     - name: Check scripts are executable
       run: |
-        test -x scripts/skill-deploy || { echo "skill-deploy not executable"; exit 1; }
-        test -x scripts/create-family || { echo "create-family not executable"; exit 1; }
+        test -x scripts/create-family || { echo "scripts/create-family not executable"; exit 1; }
+        test -x scripts/skill-deploy || { echo "scripts/skill-deploy not executable"; exit 1; }
+        test -x scripts/validate-family || { echo "scripts/validate-family not executable"; exit 1; }
+        test -x scripts/rollback-deploy || { echo "scripts/rollback-deploy not executable"; exit 1; }
+        test -x tests/smoke.sh || { echo "tests/smoke.sh not executable"; exit 1; }
         echo "Scripts are executable"
+
+    - name: Reject tracked secret env files
+      run: |
+        if git ls-files | grep -E '(^|/)\.env($|\.|/)|(^|/)\.skill-tooling\.env($|\.|/)' >/dev/null; then
+          echo "Tracked .env or .skill-tooling.env files are not allowed"
+          git ls-files | grep -E '(^|/)\.env($|\.|/)|(^|/)\.skill-tooling\.env($|\.|/)'
+          exit 1
+        fi
+
+    - name: Smoke test scaffold and deploy flow
+      run: tests/smoke.sh

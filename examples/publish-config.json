@@ -1,0 +1,41 @@
+{
+  "targets": {
+    "grok": {
+      "mode": "command",
+      "command": [
+        "/usr/local/bin/publish-grok-skill-family",
+        "{bundle_dir}",
+        "{family_name}"
+      ]
+    },
+    "grok-build": {
+      "mode": "command",
+      "command": [
+        "/usr/local/bin/publish-grok-build-skill-family",
+        "{bundle_dir}",
+        "{family_name}"
+      ]
+    },
+    "claude": {
+      "mode": "claude-agent",
+      "cli_path": "ant",
+      "model": "claude-opus-4-8",
+      "tool": "{type: agent_toolset_20260401}"
+    },
+    "claude-code": {
+      "mode": "command",
+      "command": [
+        "/usr/local/bin/publish-claude-code-skill-family",
+        "{bundle_dir}",
+        "{family_name}"
+      ]
+    },
+    "openai-chatgpt": {
+      "mode": "openai-skills",
+      "api_key_env": "OPENAI_API_KEY"
+    },
+    "codex": {
+      "mode": "codex-skills"
+    }
+  }
+}
