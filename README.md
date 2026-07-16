@@ -66,6 +66,7 @@ Target migration note:
 - `chatgpt-work` is a separate target for the ChatGPT Work UI flow and is not the same thing as the OpenAI Skills API.
 
 See [docs/family-repo-contract.md](docs/family-repo-contract.md) for the full contract.
+If an LLM needs the exact authoring rules, start with [docs/llm-authoring-contract.md](docs/llm-authoring-contract.md).
 The family manifest schema is documented in [docs/family-schema.md](docs/family-schema.md) and published as [schemas/family.schema.json](schemas/family.schema.json).
 A machine-readable schema for source skill frontmatter is published as [schemas/source-skill-frontmatter.schema.json](schemas/source-skill-frontmatter.schema.json).
 A project-level status and architecture summary lives in [docs/project-state.md](docs/project-state.md).
