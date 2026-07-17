@@ -60,6 +60,11 @@ Fix:
 - formalize manual target bundle contracts
 - add validation for generated manual packages
 
+Status update:
+- this is now partly addressed
+- manual targets now have isolated target-specific artifact-contract verification
+- the remaining gap is proving real vendor UI/admin acceptance beyond the generated artifact shape
+
 ### 5. OpenAI enterprise packaging strategy is incomplete
 
 Current state:
@@ -77,6 +82,10 @@ Fix:
 - keep `openai-plugin` as the package surface until a real supported workspace publish path is documented
 - keep `chatgpt-work` manual until a real supported publish path is documented
 
+Status update:
+- `chatgpt-work` now enforces the currently known uploader rule that skill `name` must be a slug-safe identifier
+- `openai-plugin` remains artifact-verified only
+
 ### 6. Claude enterprise automation strategy is incomplete
 
 Current state:
@@ -89,6 +98,10 @@ Needed state:
 Fix:
 - keep `claude-ai` manual until Anthropic exposes a real documented automation path
 - improve native package generation for Claude uploads
+
+Status update:
+- `claude-ai` now has its own artifact-contract verifier
+- Anthropic UI acceptance is still not proven by automation in this repo
 
 ### 7. Grok enterprise automation strategy is incomplete
 

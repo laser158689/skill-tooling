@@ -56,6 +56,11 @@ The important ownership rule is simple:
 - Humans edit `source/*.md`
 - `skill-tooling` rewrites `dist/<target>/`
 
+Manual-target output rule:
+- `chatgpt-work`, `grok-web`, and `claude-ai` emit only `INSTALL.md` plus per-skill upload `.zip` files.
+- `openai-plugin` emits only `INSTALL.md` plus `<family>-plugin.zip`.
+- Manual-target `dist/` folders should not contain extra loose prompt/skill/source files.
+
 The manifest filename is always `family.json`.
 This repo does not use repo-specific manifest filenames like `FH-Coaches.yml`.
 
@@ -194,6 +199,14 @@ Current adapter status:
 - `claude-ai` has a built-in manual-handoff publisher for the Claude Desktop / claude.ai Skills UI.
 - `claude-code` has a built-in local publisher via `claude-skills`.
 - Generated target folders under `dist/` remain the manual fallback artifacts for every target.
+
+Manual stub review status:
+
+- `chatgpt-work` now verifies its generated upload bundles against the currently known ChatGPT uploader contract, including slug-safe frontmatter `name` values.
+- `claude-ai` verifies its current artifact contract only: emitted files, ZIP shape, frontmatter presence, and markdown body shape.
+- `grok-web` verifies its current artifact contract only: emitted files, ZIP shape, markdown heading, and description line.
+- `openai-plugin` verifies its current artifact contract only: emitted files, plugin ZIP contents, and plugin manifest basics.
+- These checks are intentionally isolated per target so future tool-specific discoveries only change that target's stub.
 
 ## Credentials And Environment
 

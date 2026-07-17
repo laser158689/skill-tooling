@@ -87,6 +87,12 @@ Current semantics:
 - `chatgpt-work`: manual ChatGPT Skills handoff bundle
 - `codex`: local Codex skill install
 
+Manual-target review status:
+
+- `chatgpt-work` has target-specific contract verification for the generated upload ZIPs, including the slug-safe `name` requirement discovered from the ChatGPT uploader.
+- `claude-ai`, `grok-web`, and `openai-plugin` have target-specific artifact-contract verification for the generated handoff bundle shape.
+- Manual-target verification is now isolated per stub so future UI discoveries can be applied to one target without changing the others.
+
 ## Current Build Behavior
 
 `skill-deploy` currently does the following:
