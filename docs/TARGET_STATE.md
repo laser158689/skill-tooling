@@ -64,6 +64,7 @@ Examples:
 Definition:
 - the tool generates the exact native handoff artifact and install instructions
 - a human admin completes the final step in the vendor UI
+- each manual target owns its own artifact-contract verifier so tool-specific discoveries stay isolated
 
 Examples:
 - `chatgpt-work`

@@ -346,6 +346,12 @@ class PublishResult:
         return PUBLISH_MODE_DEPLOYMENT_CLASS.get(self.mode, "automated")
 
 
+@dataclass(frozen=True)
+class ManualVerificationResult:
+    summary: str
+    proof_level: str
+
+
 def color_output_enabled() -> bool:
     if os.environ.get("NO_COLOR"):
         return False
@@ -1071,24 +1077,29 @@ def render_target_bundle(output_root: Path, family: Family, skills: list[Skill],
             ) from exc
     bundle_dir.mkdir(parents=True, exist_ok=True)
 
+    if target == "chatgpt-work":
+        build_chatgpt_work_upload_bundles(bundle_dir, family, target_skills, target)
+        write_text(bundle_dir / "INSTALL.md", render_chatgpt_work_install_guide(family, target_skills))
+        return bundle_dir
+    if target == "grok-web":
+        build_grok_web_upload_bundles(bundle_dir, family, target_skills, target)
+        write_text(bundle_dir / "INSTALL.md", render_grok_web_install_guide(family, target_skills))
+        return bundle_dir
+    if target == "claude-ai":
+        build_claude_ai_upload_bundles(bundle_dir, family, target_skills, target)
+        write_text(bundle_dir / "INSTALL.md", render_claude_ai_install_guide(family, target_skills))
+        return bundle_dir
+    if target == "openai-plugin":
+        build_openai_plugin_package(bundle_dir, family, target_skills)
+        write_text(bundle_dir / "INSTALL.md", render_openai_plugin_install_guide(family, target_skills))
+        return bundle_dir
+
     ext = TARGET_FILE_EXTENSIONS[target]
     write_json(bundle_dir / "manifest.json", build_manifest_payload(family, target_skills, target))
     write_text(bundle_dir / "README.md", render_target_readme(family, target_skills, target))
     write_text(bundle_dir / f"family{ext}", render_family_target_text(family, target_skills, target))
     for skill in target_skills:
         write_text(bundle_dir / f"{skill.skill_id}{ext}", render_target_skill_text(family, skill, target))
-    if target == "grok-web":
-        build_grok_web_upload_bundles(bundle_dir, family, target_skills, target)
-        write_text(bundle_dir / "INSTALL.md", render_grok_web_install_guide(family, target_skills))
-    if target == "chatgpt-work":
-        build_chatgpt_work_upload_bundles(bundle_dir, family, target_skills, target)
-        write_text(bundle_dir / "INSTALL.md", render_chatgpt_work_install_guide(family, target_skills))
-    if target == "claude-ai":
-        build_claude_ai_upload_bundles(bundle_dir, family, target_skills, target)
-        write_text(bundle_dir / "INSTALL.md", render_claude_ai_install_guide(family, target_skills))
-    if target == "openai-plugin":
-        build_openai_plugin_package(bundle_dir, family, target_skills)
-        write_text(bundle_dir / "INSTALL.md", render_openai_plugin_install_guide(family, target_skills))
 
     return bundle_dir
 
@@ -1461,25 +1472,167 @@ def render_chatgpt_skill_markdown(family: Family, skill: Skill, target: str) -> 
     return "\n".join(
         [
             "---",
-            f"name: {family.name}-{skill.skill_id}",
+            f"name: {skill.skill_id}",
             f"description: {skill.description}",
             "---",
-            strip_leading_h1(get_target_body(skill, target)),
+            get_target_body(skill, target).rstrip(),
             "",
         ]
     )
 
 
-def build_manual_skill_zip(bundle_dir: Path, archive_name: str, internal_name: str, markdown: str) -> Path:
+def build_manual_skill_zip(
+    bundle_dir: Path,
+    archive_name: str,
+    internal_name: str,
+    markdown: str,
+    *,
+    keep_unpacked_copy: bool = True,
+) -> Path:
     uploads_dir = bundle_dir / "uploads"
-    package_root = uploads_dir / archive_name
-    package_root.mkdir(parents=True, exist_ok=True)
-    payload_path = package_root / internal_name
-    write_text(payload_path, markdown)
     zip_path = uploads_dir / f"{archive_name}.zip"
+    uploads_dir.mkdir(parents=True, exist_ok=True)
+    if keep_unpacked_copy:
+        package_root = uploads_dir / archive_name
+        package_root.mkdir(parents=True, exist_ok=True)
+        payload_path = package_root / internal_name
+        write_text(payload_path, markdown)
     with zipfile.ZipFile(zip_path, "w", compression=zipfile.ZIP_DEFLATED) as zf:
-        zf.write(payload_path, arcname=f"{archive_name}/{internal_name}")
+        if keep_unpacked_copy:
+            zf.write(payload_path, arcname=f"{archive_name}/{internal_name}")
+        else:
+            zf.writestr(f"{archive_name}/{internal_name}", markdown)
     return zip_path
+
+
+def ensure_expected_bundle_files(bundle_dir: Path, expected_files: set[Path]) -> None:
+    actual_files = {path.relative_to(bundle_dir) for path in bundle_dir.rglob("*") if path.is_file()}
+    if actual_files != expected_files:
+        missing = sorted(str(path) for path in expected_files - actual_files)
+        unexpected = sorted(str(path) for path in actual_files - expected_files)
+        details: list[str] = []
+        if missing:
+            details.append(f"missing {', '.join(missing)}")
+        if unexpected:
+            details.append(f"unexpected {', '.join(unexpected)}")
+        raise ValidationError(f"Manual bundle contract mismatch in {bundle_dir}: {'; '.join(details)}")
+
+
+def read_zip_entries(zip_path: Path) -> dict[str, str]:
+    entries: dict[str, str] = {}
+    with zipfile.ZipFile(zip_path) as zf:
+        for name in zf.namelist():
+            if name.endswith("/"):
+                continue
+            entries[name] = zf.read(name).decode("utf-8")
+    return entries
+
+
+def verify_chatgpt_work_bundle(bundle_dir: Path, skills: list[Skill]) -> ManualVerificationResult:
+    expected_files = {Path("INSTALL.md")}
+    expected_files.update(Path("uploads") / f"{skill.skill_id}.zip" for skill in skills)
+    ensure_expected_bundle_files(bundle_dir, expected_files)
+
+    for skill in skills:
+        zip_path = bundle_dir / "uploads" / f"{skill.skill_id}.zip"
+        entries = read_zip_entries(zip_path)
+        expected_name = f"{skill.skill_id}/SKILL.md"
+        if set(entries) != {expected_name}:
+            raise ValidationError(f"{zip_path} must contain exactly `{expected_name}`")
+        frontmatter, _body = parse_frontmatter(entries[expected_name], zip_path)
+        if frontmatter.get("name") != skill.skill_id:
+            raise ValidationError(f"{zip_path} must use slug-safe frontmatter name `{skill.skill_id}`")
+        if SLUG_RE.fullmatch(skill.skill_id) is None:
+            raise ValidationError(f"{zip_path} skill id `{skill.skill_id}` is not slug-safe for ChatGPT Work")
+    return ManualVerificationResult(
+        summary=f"artifact contract verified for {len(skills)} ChatGPT Work upload bundle(s)",
+        proof_level="artifact_contract",
+    )
+
+
+def verify_claude_ai_bundle(bundle_dir: Path, skills: list[Skill]) -> ManualVerificationResult:
+    expected_files = {Path("INSTALL.md")}
+    expected_files.update(Path("uploads") / f"{skill.skill_id}.zip" for skill in skills)
+    ensure_expected_bundle_files(bundle_dir, expected_files)
+
+    for skill in skills:
+        zip_path = bundle_dir / "uploads" / f"{skill.skill_id}.zip"
+        entries = read_zip_entries(zip_path)
+        expected_name = f"{skill.skill_id}/skill.md"
+        if set(entries) != {expected_name}:
+            raise ValidationError(f"{zip_path} must contain exactly `{expected_name}`")
+        frontmatter, body = parse_frontmatter(entries[expected_name], zip_path)
+        if frontmatter.get("description") != skill.description:
+            raise ValidationError(f"{zip_path} must preserve the skill description in frontmatter")
+        if not body.lstrip().startswith("# "):
+            raise ValidationError(f"{zip_path} must contain a markdown heading body")
+    return ManualVerificationResult(
+        summary=f"artifact contract verified for {len(skills)} Claude AI upload bundle(s)",
+        proof_level="artifact_contract",
+    )
+
+
+def verify_grok_web_bundle(bundle_dir: Path, skills: list[Skill]) -> ManualVerificationResult:
+    expected_files = {Path("INSTALL.md")}
+    expected_files.update(Path("uploads") / f"{skill.skill_id}.zip" for skill in skills)
+    ensure_expected_bundle_files(bundle_dir, expected_files)
+
+    for skill in skills:
+        zip_path = bundle_dir / "uploads" / f"{skill.skill_id}.zip"
+        entries = read_zip_entries(zip_path)
+        expected_name = f"{skill.skill_id}/SKILL.md"
+        if set(entries) != {expected_name}:
+            raise ValidationError(f"{zip_path} must contain exactly `{expected_name}`")
+        markdown = entries[expected_name]
+        if not markdown.startswith("# "):
+            raise ValidationError(f"{zip_path} must start with a markdown heading")
+        if f"Description: {skill.description}" not in markdown:
+            raise ValidationError(f"{zip_path} must include the skill description line")
+    return ManualVerificationResult(
+        summary=f"artifact contract verified for {len(skills)} Grok Web upload bundle(s)",
+        proof_level="artifact_contract",
+    )
+
+
+def verify_openai_plugin_bundle(bundle_dir: Path, family: Family, skills: list[Skill]) -> ManualVerificationResult:
+    zip_path = bundle_dir / f"{family.name}-plugin.zip"
+    expected_files = {Path("INSTALL.md"), Path(f"{family.name}-plugin.zip")}
+    ensure_expected_bundle_files(bundle_dir, expected_files)
+
+    entries = read_zip_entries(zip_path)
+    expected_entry_names = {".codex-plugin/plugin.json"}
+    expected_entry_names.update(f"skills/{skill.skill_id}/SKILL.md" for skill in skills)
+    if set(entries) != expected_entry_names:
+        missing = sorted(expected_entry_names - set(entries))
+        unexpected = sorted(set(entries) - expected_entry_names)
+        details: list[str] = []
+        if missing:
+            details.append(f"missing {', '.join(missing)}")
+        if unexpected:
+            details.append(f"unexpected {', '.join(unexpected)}")
+        raise ValidationError(f"{zip_path} plugin package contract mismatch: {'; '.join(details)}")
+
+    plugin_manifest = json.loads(entries[".codex-plugin/plugin.json"])
+    if plugin_manifest.get("name") != family.name:
+        raise ValidationError(f"{zip_path} plugin manifest must use family name `{family.name}`")
+    if plugin_manifest.get("skills") != "./skills/":
+        raise ValidationError(f"{zip_path} plugin manifest must point skills to `./skills/`")
+    return ManualVerificationResult(
+        summary=f"artifact contract verified for OpenAI plugin package with {len(skills)} skill bundle(s)",
+        proof_level="artifact_contract",
+    )
+
+
+def verify_manual_bundle_contract(target: str, bundle_dir: Path, family: Family, skills: list[Skill]) -> ManualVerificationResult:
+    if target == "chatgpt-work":
+        return verify_chatgpt_work_bundle(bundle_dir, skills)
+    if target == "claude-ai":
+        return verify_claude_ai_bundle(bundle_dir, skills)
+    if target == "grok-web":
+        return verify_grok_web_bundle(bundle_dir, skills)
+    if target == "openai-plugin":
+        return verify_openai_plugin_bundle(bundle_dir, family, skills)
+    raise ValidationError(f"No manual bundle verifier implemented for target {target}")
 
 
 def build_chatgpt_work_upload_bundles(bundle_dir: Path, family: Family, skills: list[Skill], target: str) -> list[Path]:
@@ -1491,6 +1644,7 @@ def build_chatgpt_work_upload_bundles(bundle_dir: Path, family: Family, skills: 
                 skill.skill_id,
                 "SKILL.md",
                 render_chatgpt_skill_markdown(family, skill, target),
+                keep_unpacked_copy=False,
             )
         )
     return zip_paths
@@ -1505,6 +1659,7 @@ def build_claude_ai_upload_bundles(bundle_dir: Path, family: Family, skills: lis
                 skill.skill_id,
                 "skill.md",
                 render_claude_skill_markdown(family, skill, target),
+                keep_unpacked_copy=False,
             )
         )
     return zip_paths
@@ -1519,46 +1674,48 @@ def build_grok_web_upload_bundles(bundle_dir: Path, family: Family, skills: list
                 skill.skill_id,
                 "SKILL.md",
                 render_grok_skill_markdown(family, skill, target),
+                keep_unpacked_copy=False,
             )
         )
     return zip_paths
 
 
 def build_openai_plugin_package(bundle_dir: Path, family: Family, skills: list[Skill]) -> Path:
-    plugin_root = bundle_dir / "plugin"
-    manifest_root = plugin_root / ".codex-plugin"
-    skills_root = plugin_root / "skills"
-    manifest_root.mkdir(parents=True, exist_ok=True)
-    skills_root.mkdir(parents=True, exist_ok=True)
-
-    plugin_manifest = {
-        "name": family.name,
-        "version": family.version,
-        "description": family.description,
-        "skills": "./skills/",
-        "interface": {
-            "displayName": family.name,
-            "shortDescription": family.description,
-            "longDescription": family.description,
-            "developerName": "skill-tooling",
-            "category": "Productivity",
-            "capabilities": ["Skills"],
-            "defaultPrompt": [f"Use the {family.name} plugin skills"],
-            "screenshots": [],
-        },
-    }
-    write_json(manifest_root / "plugin.json", plugin_manifest)
-
-    for skill in skills:
-        skill_root = skills_root / skill.skill_id
-        skill_root.mkdir(parents=True, exist_ok=True)
-        write_text(skill_root / "SKILL.md", render_chatgpt_skill_markdown(family, skill, "openai-skills-api"))
-
     zip_path = bundle_dir / f"{family.name}-plugin.zip"
-    with zipfile.ZipFile(zip_path, "w", compression=zipfile.ZIP_DEFLATED) as zf:
-        for path in sorted(plugin_root.rglob("*")):
-            if path.is_file():
-                zf.write(path, arcname=str(path.relative_to(plugin_root)))
+    with tempfile.TemporaryDirectory(prefix="skill-tooling-plugin-") as temp_dir:
+        plugin_root = Path(temp_dir) / "plugin"
+        manifest_root = plugin_root / ".codex-plugin"
+        skills_root = plugin_root / "skills"
+        manifest_root.mkdir(parents=True, exist_ok=True)
+        skills_root.mkdir(parents=True, exist_ok=True)
+
+        plugin_manifest = {
+            "name": family.name,
+            "version": family.version,
+            "description": family.description,
+            "skills": "./skills/",
+            "interface": {
+                "displayName": family.name,
+                "shortDescription": family.description,
+                "longDescription": family.description,
+                "developerName": "skill-tooling",
+                "category": "Productivity",
+                "capabilities": ["Skills"],
+                "defaultPrompt": [f"Use the {family.name} plugin skills"],
+                "screenshots": [],
+            },
+        }
+        write_json(manifest_root / "plugin.json", plugin_manifest)
+
+        for skill in skills:
+            skill_root = skills_root / skill.skill_id
+            skill_root.mkdir(parents=True, exist_ok=True)
+            write_text(skill_root / "SKILL.md", render_chatgpt_skill_markdown(family, skill, "openai-skills-api"))
+
+        with zipfile.ZipFile(zip_path, "w", compression=zipfile.ZIP_DEFLATED) as zf:
+            for path in sorted(plugin_root.rglob("*")):
+                if path.is_file():
+                    zf.write(path, arcname=str(path.relative_to(plugin_root)))
     return zip_path
 
 
@@ -1571,16 +1728,17 @@ def render_chatgpt_work_install_guide(family: Family, skills: list[Skill]) -> st
         "",
         "Recommended flow:",
         "",
-        "1. Open the ChatGPT Work Skills screen.",
-        "2. Upload one generated `.zip` bundle per skill when the UI supports upload, or open the matching bundle directory and copy from `SKILL.md`.",
-        "3. Save and publish the skill in the workspace UI.",
+        "1. In ChatGPT, open `Skills` from your profile menu.",
+        "2. Select `Create`.",
+        "3. Select `Upload from your computer`.",
+        "4. Upload the matching `.zip` file from `uploads/`.",
+        "5. Repeat for each skill you want available in the workspace.",
         "",
         "Generated skills:",
         "",
     ]
     for skill in skills:
         lines.append(f"- `uploads/{skill.skill_id}.zip`")
-        lines.append(f"- `uploads/{skill.skill_id}/SKILL.md`")
     lines.append("")
     return "\n".join(lines)
 
@@ -1590,20 +1748,21 @@ def render_grok_web_install_guide(family: Family, skills: list[Skill]) -> str:
         f"# Grok Web Manual Build - {family.name}",
         "",
         "This target does not have a built-in web publisher in `skill-tooling`.",
-        "Use the generated upload bundles in `uploads/` to create or share Grok skills manually on grok.com or in supported apps.",
+        "Use the generated upload bundles in `uploads/` to create Grok skills manually on grok.com.",
         "",
         "Recommended flow:",
         "",
-        "1. Open Grok Skills on the web or supported mobile app.",
-        "2. Upload one generated `.zip` bundle per skill when the UI supports upload, or open the matching bundle directory and copy from `SKILL.md`.",
-        "3. Save and share the skill from the Grok Skills UI.",
+        "1. Open Grok Skills on grok.com.",
+        "2. Create a new skill.",
+        "3. Upload the matching `.zip` file from `uploads/`.",
+        "4. Save the skill.",
+        "5. Repeat for each skill you want available in Grok.",
         "",
         "Generated skills:",
         "",
     ]
     for skill in skills:
         lines.append(f"- `uploads/{skill.skill_id}.zip`")
-        lines.append(f"- `uploads/{skill.skill_id}/SKILL.md`")
     lines.append("")
     return "\n".join(lines)
 
@@ -1613,25 +1772,22 @@ def render_openai_plugin_install_guide(family: Family, skills: list[Skill]) -> s
         f"# OpenAI Plugin Package - {family.name}",
         "",
         "This target prepares an OpenAI plugin package for manual workspace distribution.",
-        "Use the generated plugin bundle to upload, import, or register the plugin in the ChatGPT / Codex workspace surface when that admin flow is available.",
+        "Use the generated plugin bundle to import the plugin into the target workspace surface.",
         "",
         "Artifacts:",
         "",
         f"- `{family.name}-plugin.zip`",
-        "- `plugin/.codex-plugin/plugin.json`",
-        "- `plugin/skills/<skill>/SKILL.md`",
         "",
         "Recommended flow:",
         "",
-        "1. Open the Plugin directory or workspace plugin administration surface.",
-        "2. Upload or import the generated plugin package if your workspace surface supports it.",
+        "1. Open the target workspace plugin administration surface.",
+        f"2. Import `{family.name}-plugin.zip`.",
         "3. Verify the packaged skills are available to the intended workspace roles.",
         "",
-        "Packaged skills:",
+        "Packaged skill count:",
         "",
     ]
-    for skill in skills:
-        lines.append(f"- `plugin/skills/{skill.skill_id}/SKILL.md`")
+    lines.append(f"- `{len(skills)}` skill bundle(s)")
     lines.append("")
     return "\n".join(lines)
 
@@ -1641,37 +1797,35 @@ def render_claude_ai_install_guide(family: Family, skills: list[Skill]) -> str:
         f"# Claude AI Manual Build - {family.name}",
         "",
         "This target does not have a built-in cloud publisher in `skill-tooling`.",
-        "Use the generated upload bundles in `uploads/` to create or import Claude skills manually in Claude Desktop or claude.ai.",
-        "",
-        "Important:",
-        "",
-        "- Treat this directory as the manual handoff bundle for Claude's visible Skills product surface.",
+        "Use the generated upload bundles in `uploads/` to create Claude skills manually in the Claude Skills interface.",
         "",
         "Recommended flow:",
         "",
-        "1. Open Claude Desktop or claude.ai and go to the Skills interface.",
-        "2. Upload one generated `.zip` bundle per skill when the UI supports upload, or open the matching bundle directory and import/copy from `skill.md`.",
-        "3. Use `family.skill` only as a family-level reference, not as a replacement for the per-skill upload bundles.",
+        "1. Open the Claude Skills interface.",
+        "2. Create a new skill.",
+        "3. Upload the matching `.zip` file from `uploads/`.",
+        "4. Save the skill.",
+        "5. Repeat for each skill you want available in Claude.",
         "",
         "Generated skills:",
         "",
     ]
     for skill in skills:
         lines.append(f"- `uploads/{skill.skill_id}.zip`")
-        lines.append(f"- `uploads/{skill.skill_id}/skill.md`")
     lines.append("")
     return "\n".join(lines)
 
 
-def publish_manual_bundle(bundle_dir: Path, target: str) -> PublishResult:
+def publish_manual_bundle(bundle_dir: Path, target: str, family: Family, skills: list[Skill]) -> PublishResult:
     destination = bundle_dir / "INSTALL.md"
+    verification = verify_manual_bundle_contract(target, bundle_dir, family, skills)
     return PublishResult(
         target=target,
         mode="manual",
         bundle_dir=bundle_dir,
         destination=destination,
         publish_result=f"manual handoff prepared at {destination}",
-        verification_result="manual handoff bundle created",
+        verification_result=f"{verification.summary} ({verification.proof_level})",
         rollback_mode="none",
     )
 
@@ -1681,26 +1835,26 @@ def manual_follow_up_message(target: str, result: PublishResult) -> str | None:
         return None
     if target == "grok-web":
         return (
-            "Manual next step required: open Grok Skills on grok.com or a supported Grok app, upload one generated "
-            "bundle from `uploads/*.zip` per skill when supported or copy from `uploads/*/SKILL.md`, "
+            "Manual next step required: open Grok Skills on grok.com, create a new skill, upload one generated "
+            "bundle from `uploads/*.zip` per skill, "
             f"and follow {result.destination}."
         )
     if target == "chatgpt-work":
         return (
-            "Manual next step required: open ChatGPT Work, upload one generated bundle from `uploads/*.zip` per skill "
-            "when supported or copy from `uploads/*/SKILL.md`, "
+            "Manual next step required: open ChatGPT Skills, choose Create, choose Upload from your computer, "
+            "upload one generated bundle from `uploads/*.zip` per skill, "
             f"and follow {result.destination}."
         )
     if target == "openai-plugin":
         return (
-            "Manual next step required: open the ChatGPT / Codex plugin administration surface, upload or import "
-            "the generated `*-plugin.zip` bundle if supported or use the generated `plugin/` "
-            f"directory, and follow {result.destination}."
+            "Manual next step required: open the target workspace plugin administration surface, import the "
+            "generated `*-plugin.zip` bundle, "
+            f"and follow {result.destination}."
         )
     if target == "claude-ai":
         return (
-            "Manual next step required: open Claude Desktop or claude.ai, upload one generated bundle from "
-            "`uploads/*.zip` per skill when supported or import/copy from `uploads/*/skill.md`, "
+            "Manual next step required: open the Claude Skills interface, create a new skill, upload one generated "
+            "bundle from `uploads/*.zip` per skill, "
             f"and follow {result.destination}."
         )
     return f"Manual next step required: complete installation using the generated bundle at {result.bundle_dir}."
@@ -2179,7 +2333,7 @@ def publish_with_rollback(
         config = PublisherConfig(mode="copy")
 
     if config.mode == "manual":
-        return publish_manual_bundle(bundle_dir, target)
+        return publish_manual_bundle(bundle_dir, target, family, skills)
 
     if config.mode == "openai-skills":
         return publish_openai_skills(bundle_dir, target, family, skills, history_dir, config)

@@ -31,7 +31,7 @@ This matrix describes the intended deployment workflow in workflow order and the
 | Publish `grok-build` through local skill install | Real tooling |
 | Verify API-managed publishes | Real tooling |
 | Verify local-install publishes | Real tooling |
-| Verify manual targets by artifact generation and install guide output | Real tooling |
+| Verify manual targets against target-specific artifact contracts | Real tooling |
 | Write receipts and state under `.skill-tooling/deployments/` | Real tooling |
 | Roll back copy-mode publishes | Real tooling |
 | Roll back built-in local-install publishers | Real tooling |
@@ -58,5 +58,6 @@ CLI output should use these meanings consistently:
 
 - `Deployed to ...`: automated publish actually completed
 - `Prepared for ...`: artifact bundle was generated for a manual or package-only target
+- `Verified ... (artifact_contract)`: generated manual artifact matched the current target-specific contract checks
 - `Manual next step required`: human admin action is still needed
 - `Unsupported`: target exists conceptually but does not yet have a supported build/publish path

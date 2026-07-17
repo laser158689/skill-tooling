@@ -167,11 +167,41 @@ test -f "$FAMILY_DIR/dist/grok/family.grok"
 test -f "$FAMILY_DIR/dist/grok/orchestrator.grok"
 test -f "$FAMILY_DIR/dist/grok-web/INSTALL.md"
 test -f "$FAMILY_DIR/dist/grok-web/uploads/orchestrator.zip"
-test -f "$FAMILY_DIR/dist/grok-web/uploads/orchestrator/SKILL.md"
+test ! -f "$FAMILY_DIR/dist/grok-web/README.md"
+test ! -f "$FAMILY_DIR/dist/grok-web/manifest.json"
+test ! -f "$FAMILY_DIR/dist/grok-web/family.md"
+test ! -f "$FAMILY_DIR/dist/grok-web/orchestrator.md"
+test ! -f "$FAMILY_DIR/dist/grok-web/uploads/orchestrator/SKILL.md"
+python3 - <<PY
+import zipfile
+from pathlib import Path
+zip_path = Path("$FAMILY_DIR/dist/grok-web/uploads/orchestrator.zip")
+with zipfile.ZipFile(zip_path) as zf:
+    names = zf.namelist()
+    assert names == ["orchestrator/SKILL.md"], names
+    text = zf.read("orchestrator/SKILL.md").decode("utf-8")
+assert text.startswith("# "), text
+assert "Description: Primary orchestrator for the customer-support family" in text, text
+PY
 
 test -f "$FAMILY_DIR/dist/claude-ai/INSTALL.md"
 test -f "$FAMILY_DIR/dist/claude-ai/uploads/orchestrator.zip"
-test -f "$FAMILY_DIR/dist/claude-ai/uploads/orchestrator/skill.md"
+test ! -f "$FAMILY_DIR/dist/claude-ai/README.md"
+test ! -f "$FAMILY_DIR/dist/claude-ai/manifest.json"
+test ! -f "$FAMILY_DIR/dist/claude-ai/family.skill"
+test ! -f "$FAMILY_DIR/dist/claude-ai/orchestrator.skill"
+test ! -f "$FAMILY_DIR/dist/claude-ai/uploads/orchestrator/skill.md"
+python3 - <<PY
+import zipfile
+from pathlib import Path
+zip_path = Path("$FAMILY_DIR/dist/claude-ai/uploads/orchestrator.zip")
+with zipfile.ZipFile(zip_path) as zf:
+    names = zf.namelist()
+    assert names == ["orchestrator/skill.md"], names
+    text = zf.read("orchestrator/skill.md").decode("utf-8")
+assert text.startswith("---\ndescription: Primary orchestrator for the customer-support family"), text
+assert "\n# customer-support--orchestrator\n" in text, text
+PY
 test -f "$FAMILY_DIR/dist/claude-code/README.md"
 test -f "$FAMILY_DIR/dist/claude-code/family.skill"
 test -f "$FAMILY_DIR/dist/claude-code/orchestrator.skill"
@@ -181,11 +211,38 @@ test -f "$FAMILY_DIR/dist/codex/family.prompt"
 test -f "$FAMILY_DIR/dist/openai-skills-api/orchestrator.prompt"
 test -f "$FAMILY_DIR/dist/openai-plugin/INSTALL.md"
 test -f "$FAMILY_DIR/dist/openai-plugin/customer-support-plugin.zip"
-test -f "$FAMILY_DIR/dist/openai-plugin/plugin/.codex-plugin/plugin.json"
-test -f "$FAMILY_DIR/dist/openai-plugin/plugin/skills/orchestrator/SKILL.md"
+test ! -f "$FAMILY_DIR/dist/openai-plugin/README.md"
+test ! -f "$FAMILY_DIR/dist/openai-plugin/manifest.json"
+test ! -f "$FAMILY_DIR/dist/openai-plugin/family.md"
+test ! -f "$FAMILY_DIR/dist/openai-plugin/orchestrator.md"
+python3 - <<PY
+import json, zipfile
+from pathlib import Path
+zip_path = Path("$FAMILY_DIR/dist/openai-plugin/customer-support-plugin.zip")
+with zipfile.ZipFile(zip_path) as zf:
+    names = sorted(zf.namelist())
+    assert names == [".codex-plugin/plugin.json", "skills/orchestrator/SKILL.md"], names
+    manifest = json.loads(zf.read(".codex-plugin/plugin.json").decode("utf-8"))
+    skill_text = zf.read("skills/orchestrator/SKILL.md").decode("utf-8")
+assert manifest["name"] == "customer-support", manifest
+assert manifest["skills"] == "./skills/", manifest
+assert "name: orchestrator" in skill_text, skill_text
+PY
 test -f "$FAMILY_DIR/dist/chatgpt-work/INSTALL.md"
 test -f "$FAMILY_DIR/dist/chatgpt-work/uploads/orchestrator.zip"
-test -f "$FAMILY_DIR/dist/chatgpt-work/uploads/orchestrator/SKILL.md"
+test ! -f "$FAMILY_DIR/dist/chatgpt-work/README.md"
+test ! -f "$FAMILY_DIR/dist/chatgpt-work/manifest.json"
+test ! -f "$FAMILY_DIR/dist/chatgpt-work/family.prompt"
+test ! -f "$FAMILY_DIR/dist/chatgpt-work/orchestrator.prompt"
+test ! -f "$FAMILY_DIR/dist/chatgpt-work/uploads/orchestrator/SKILL.md"
+python3 - <<PY
+import zipfile
+from pathlib import Path
+zip_path = Path("$FAMILY_DIR/dist/chatgpt-work/uploads/orchestrator.zip")
+with zipfile.ZipFile(zip_path) as zf:
+    text = zf.read("orchestrator/SKILL.md").decode("utf-8")
+assert "name: orchestrator" in text, text
+PY
 test -f "$CODEX_HOME_ROOT/skills/${FAMILY_NAME}--orchestrator/SKILL.md"
 grep -q "name: \"${FAMILY_NAME}--orchestrator\"" "$CODEX_HOME_ROOT/skills/${FAMILY_NAME}--orchestrator/SKILL.md"
 test -f "$CODEX_DEFAULT_HOME/.agents/skills/${FAMILY_NAME}--orchestrator/SKILL.md"
