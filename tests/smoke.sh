@@ -39,6 +39,39 @@ GROK_HISTORY_DIR="$TMP_DIR/grok-history"
 "$REPO_ROOT/scripts/create-family" "$FAMILY_NAME" "Reusable support skills" --path "$TMP_DIR"
 "$REPO_ROOT/scripts/validate-family" --source "$FAMILY_DIR"
 "$REPO_ROOT/scripts/skill-deploy" --source "$FAMILY_DIR"
+"$REPO_ROOT/scripts/skill-deploy" --source "$FAMILY_DIR"
+
+mkdir -p "$FAMILY_DIR/dist/grok/uploads 3"
+"$REPO_ROOT/scripts/skill-deploy" --source "$FAMILY_DIR" --target grok
+test ! -e "$FAMILY_DIR/dist/grok/uploads 3"
+
+python3 - <<PY
+from pathlib import Path
+path = Path("$FAMILY_DIR/source/orchestrator.md")
+text = path.read_text()
+text += "\n" + ("x" * 18050) + "\n"
+path.write_text(text)
+PY
+if ! "$REPO_ROOT/scripts/validate-family" --source "$FAMILY_DIR" >"$TMP_DIR/size-warning.stdout" 2>"$TMP_DIR/size-warning.stderr"; then
+  echo "Expected size warning validation to pass"
+  exit 1
+fi
+grep -q "Source skill size warnings:" "$TMP_DIR/size-warning.stdout"
+python3 - <<PY
+from pathlib import Path
+path = Path("$FAMILY_DIR/source/orchestrator.md")
+text = path.read_text()
+text += "\n" + ("y" * 2500) + "\n"
+path.write_text(text)
+PY
+if "$REPO_ROOT/scripts/validate-family" --source "$FAMILY_DIR" > /dev/null 2>"$TMP_DIR/size-error.stderr"; then
+  echo "Expected hard source skill size validation failure"
+  exit 1
+fi
+grep -q "Source skill size validation failed:" "$TMP_DIR/size-error.stderr"
+rm -rf "$FAMILY_DIR"
+"$REPO_ROOT/scripts/create-family" "$FAMILY_NAME" "Reusable support skills" --path "$TMP_DIR"
+"$REPO_ROOT/scripts/skill-deploy" --source "$FAMILY_DIR"
 
 cp "$FAMILY_DIR/family.json" "$TMP_DIR/bad-family.json"
 python3 - <<EOF

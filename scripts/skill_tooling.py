@@ -156,6 +156,9 @@ DEFAULT_PUBLISH_CONFIG_FILENAMES = ("publish-config.json",)
 
 HISTORY_ROOT_DIRNAME = ".skill-tooling"
 DEFAULT_DOTENV_FILENAMES = (".env", ".skill-tooling.env")
+DEFAULT_SOURCE_SKILL_SIZE_WARNING_BYTES = 18_000
+DEFAULT_SOURCE_SKILL_SIZE_MAX_BYTES = 20_000
+SUSPICIOUS_DUPLICATE_SUFFIX_RE = re.compile(r".+ \d+(?=\.[^.]+$|$)")
 ALLOWED_DOTENV_KEYS = {
     "ANTHROPIC_API_KEY",
     "CODEX_HOME",
@@ -945,6 +948,48 @@ def load_skills(family: Family) -> list[Skill]:
     return skills
 
 
+def source_skill_body_size_bytes(skill: Skill) -> int:
+    return len(skill.body.encode("utf-8"))
+
+
+def validate_source_skill_sizes(
+    skills: list[Skill],
+    *,
+    warning_bytes: int = DEFAULT_SOURCE_SKILL_SIZE_WARNING_BYTES,
+    max_bytes: int = DEFAULT_SOURCE_SKILL_SIZE_MAX_BYTES,
+) -> list[str]:
+    if warning_bytes < 0 or max_bytes < 1 or warning_bytes > max_bytes:
+        raise ValidationError(
+            "Source skill size thresholds are invalid. "
+            "Expected 0 <= warning threshold <= hard limit and hard limit >= 1."
+        )
+
+    warnings: list[str] = []
+    failures: list[str] = []
+    for skill in skills:
+        body_size = source_skill_body_size_bytes(skill)
+        if body_size > max_bytes:
+            failures.append(
+                f"{skill.path} body is {body_size} bytes after frontmatter removal; "
+                f"limit is {max_bytes} bytes"
+            )
+        elif body_size >= warning_bytes:
+            warnings.append(
+                f"{skill.path} body is {body_size} bytes after frontmatter removal; "
+                f"warning threshold is {warning_bytes} bytes"
+            )
+
+    if failures:
+        lines = ["Source skill size validation failed:"]
+        lines.extend(f"- {message}" for message in failures)
+        if warnings:
+            lines.append("Warnings:")
+            lines.extend(f"- {message}" for message in warnings)
+        raise ValidationError("\n".join(lines))
+
+    return warnings
+
+
 def load_family_repo(source: Path) -> tuple[Family, list[Skill]]:
     family = load_manifest(source)
     skills = load_skills(family)
@@ -1059,6 +1104,18 @@ def build_manifest_payload(family: Family, skills: list[Skill], target: str) -> 
     }
 
 
+def ensure_no_duplicate_suffixed_artifacts(root: Path, label: str) -> None:
+    suspicious_paths: list[str] = []
+    for path in sorted(root.rglob("*")):
+        if SUSPICIOUS_DUPLICATE_SUFFIX_RE.fullmatch(path.name):
+            suspicious_paths.append(str(path.relative_to(root)))
+    if suspicious_paths:
+        raise ValidationError(
+            f"{label} contains suspicious duplicate-suffixed artifacts after regeneration: "
+            f"{', '.join(suspicious_paths)}"
+        )
+
+
 def render_target_bundle(output_root: Path, family: Family, skills: list[Skill], target: str) -> Path:
     target_skills = [skill for skill in skills if target in skill.targets]
     if not target_skills:
@@ -1080,18 +1137,22 @@ def render_target_bundle(output_root: Path, family: Family, skills: list[Skill],
     if target == "chatgpt-work":
         build_chatgpt_work_upload_bundles(bundle_dir, family, target_skills, target)
         write_text(bundle_dir / "INSTALL.md", render_chatgpt_work_install_guide(family, target_skills))
+        ensure_no_duplicate_suffixed_artifacts(bundle_dir, f"Generated target directory {bundle_dir}")
         return bundle_dir
     if target == "grok-web":
         build_grok_web_upload_bundles(bundle_dir, family, target_skills, target)
         write_text(bundle_dir / "INSTALL.md", render_grok_web_install_guide(family, target_skills))
+        ensure_no_duplicate_suffixed_artifacts(bundle_dir, f"Generated target directory {bundle_dir}")
         return bundle_dir
     if target == "claude-ai":
         build_claude_ai_upload_bundles(bundle_dir, family, target_skills, target)
         write_text(bundle_dir / "INSTALL.md", render_claude_ai_install_guide(family, target_skills))
+        ensure_no_duplicate_suffixed_artifacts(bundle_dir, f"Generated target directory {bundle_dir}")
         return bundle_dir
     if target == "openai-plugin":
         build_openai_plugin_package(bundle_dir, family, target_skills)
         write_text(bundle_dir / "INSTALL.md", render_openai_plugin_install_guide(family, target_skills))
+        ensure_no_duplicate_suffixed_artifacts(bundle_dir, f"Generated target directory {bundle_dir}")
         return bundle_dir
 
     ext = TARGET_FILE_EXTENSIONS[target]
@@ -1101,6 +1162,7 @@ def render_target_bundle(output_root: Path, family: Family, skills: list[Skill],
     for skill in target_skills:
         write_text(bundle_dir / f"{skill.skill_id}{ext}", render_target_skill_text(family, skill, target))
 
+    ensure_no_duplicate_suffixed_artifacts(bundle_dir, f"Generated target directory {bundle_dir}")
     return bundle_dir
 
 
@@ -2685,6 +2747,7 @@ def create_family_repo(args: argparse.Namespace) -> int:
 def validate_family_repo(args: argparse.Namespace) -> int:
     with resolve_source_context(args) as source_context:
         family, skills = load_family_repo(source_context.path)
+        size_warnings = validate_source_skill_sizes(skills)
 
     print(f"Family: {family.name}")
     print(f"Description: {family.description}")
@@ -2693,6 +2756,10 @@ def validate_family_repo(args: argparse.Namespace) -> int:
     print(f"Skills: {len(skills)}")
     for skill in skills:
         print(f"- {skill.skill_id}: {', '.join(skill.targets)}")
+    if size_warnings:
+        print("Source skill size warnings:")
+        for warning in size_warnings:
+            print(f"- {warning}")
     print("Validation passed.")
     return 0
 
@@ -2712,6 +2779,7 @@ def deploy_family_repo(args: argparse.Namespace) -> int:
         config_path = resolve_publish_config_path(args, source_context.path)
         publish_configs = load_publish_config(config_path)
         family, skills = load_family_repo(source_context.path)
+        size_warnings = validate_source_skill_sizes(skills)
 
         selected_targets: list[str] = []
         for requested_target in requested_targets:
@@ -2733,6 +2801,10 @@ def deploy_family_repo(args: argparse.Namespace) -> int:
         print(f"Resolved source: {source_context.path}")
         print(f"Output root: {output_root}")
         print(f"History dir: {history_dir}")
+        if size_warnings:
+            print("Source skill size warnings:")
+            for warning in size_warnings:
+                print(f"- {warning}")
         if config_path is not None:
             print(f"Publish config: {config_path}")
         if loaded_env_files:
