@@ -56,6 +56,11 @@ The important ownership rule is simple:
 - Humans edit `source/*.md`
 - `skill-tooling` rewrites `dist/<target>/`
 
+Generated-output rewrite rule:
+- Every `skill-deploy` run removes and rebuilds each selected generated target directory.
+- Repeated deploys against unchanged source should produce the same target file tree.
+- Duplicate-suffixed artifacts like `README 2.md` or `uploads 3/` are treated as invalid generated output.
+
 Manual-target output rule:
 - `chatgpt-work`, `grok-web`, and `claude-ai` emit only `INSTALL.md` plus per-skill upload `.zip` files.
 - `openai-plugin` emits only `INSTALL.md` plus `<family>-plugin.zip`.
@@ -68,6 +73,8 @@ Source skill note:
 - `source/*.md` uses a small standardized YAML frontmatter block.
 - Supported frontmatter keys are `name` and `description`.
 - Per-skill `targets` are not part of the source contract; targets are defined at the family level in `family.json`.
+- `skill-deploy` and `validate-family` measure authored markdown body size after frontmatter removal.
+- Source skill bodies warn at 18,000 bytes and fail validation at 20,000 bytes.
 
 Target migration note:
 - `openai-chatgpt` has been renamed to `openai-skills-api`.
