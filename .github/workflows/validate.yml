@@ -1,0 +1,139 @@
+name: Validate
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: validate-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      PYTHONDONTWRITEBYTECODE: "1"
+    steps:
+    - name: Check out repository
+      uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      with:
+        fetch-depth: 0
+        persist-credentials: false
+
+    - name: Set up Python
+      uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+      with:
+        python-version: "3.12"
+
+    - name: Verify script syntax
+      run: |
+        bash -n scripts/create-family
+        bash -n scripts/skill-deploy
+        bash -n scripts/validate-family
+        bash -n scripts/rollback-deploy
+        bash -n tests/smoke.sh
+        python3 -m py_compile scripts/skill_tooling.py
+
+    - name: Validate Python project metadata
+      run: |
+        python3 - <<'PY'
+        import pathlib
+        import tomllib
+
+        pyproject = pathlib.Path("pyproject.toml")
+        data = tomllib.loads(pyproject.read_text())
+        project = data["project"]
+        assert project["name"] == "skill-tooling"
+        assert data["tool"]["poetry"]["package-mode"] is False
+        assert data["build-system"]["requires"] == ["poetry-core==2.4.1"]
+        assert pathlib.Path("poetry.lock").exists()
+        PY
+
+    - name: Check scripts are executable
+      run: |
+        test -x scripts/create-family || { echo "scripts/create-family not executable"; exit 1; }
+        test -x scripts/skill-deploy || { echo "scripts/skill-deploy not executable"; exit 1; }
+        test -x scripts/validate-family || { echo "scripts/validate-family not executable"; exit 1; }
+        test -x scripts/rollback-deploy || { echo "scripts/rollback-deploy not executable"; exit 1; }
+        test -x tests/smoke.sh || { echo "tests/smoke.sh not executable"; exit 1; }
+        echo "Scripts are executable"
+
+    - name: Reject tracked sensitive files and private workstation paths
+      run: |
+        python3 - <<'PY'
+        import pathlib
+        import re
+        import subprocess
+
+        tracked = subprocess.run(
+            ["git", "ls-files", "-z"],
+            check=True,
+            capture_output=True,
+        ).stdout.decode().split("\0")
+        tracked = [path for path in tracked if path]
+        sensitive_names = re.compile(
+            r"(^|/)(?:\.env(?:\..+)?|\.skill-tooling\.env(?:\..+)?|"
+            r"id_(?:rsa|ed25519)|credentials[^/]*\.json|service-account[^/]*\.json)$",
+            re.IGNORECASE,
+        )
+        allowed_examples = {".env.example", ".env.sample", ".skill-tooling.env.example"}
+        sensitive_suffixes = {
+            ".key", ".pem", ".p12", ".pfx", ".jks", ".keystore",
+            ".sqlite", ".sqlite3", ".db", ".mobileprovision",
+        }
+        violations = []
+        for raw_path in tracked:
+            path = pathlib.PurePosixPath(raw_path)
+            if sensitive_names.search(raw_path) and path.name not in allowed_examples:
+                violations.append(raw_path)
+            if path.suffix.lower() in sensitive_suffixes:
+                violations.append(raw_path)
+        if violations:
+            raise SystemExit("Tracked sensitive files are not allowed:\n- " + "\n- ".join(sorted(set(violations))))
+
+        posix_home_prefix = b"/" + b"Users/"
+        windows_home_prefix = b"Users\\"
+        private_path_patterns = (
+            re.compile(re.escape(posix_home_prefix) + rb"[^/\r\n]+/"),
+            re.compile(rb"[A-Za-z]:\\" + re.escape(windows_home_prefix) + rb"[^\\\r\n]+\\"),
+        )
+        private_path_hits = []
+        for raw_path in tracked:
+            path = pathlib.Path(raw_path)
+            try:
+                content = path.read_bytes()
+            except OSError:
+                continue
+            if any(pattern.search(content) for pattern in private_path_patterns):
+                private_path_hits.append(raw_path)
+        if private_path_hits:
+            raise SystemExit(
+                "Tracked files contain private workstation paths:\n- "
+                + "\n- ".join(sorted(private_path_hits))
+            )
+        PY
+
+    - name: Scan full Git history for secrets
+      env:
+        GITLEAKS_VERSION: "8.30.1"
+        GITLEAKS_SHA256: "551f6fc83ea457d62a0d98237cbad105af8d557003051f41f3e7ca7b3f2470eb"
+      run: |
+        archive="gitleaks_${GITLEAKS_VERSION}_linux_x64.tar.gz"
+        curl --fail --location --proto '=https' --tlsv1.2 \
+          --output "$RUNNER_TEMP/$archive" \
+          "https://github.com/gitleaks/gitleaks/releases/download/v${GITLEAKS_VERSION}/$archive"
+        echo "${GITLEAKS_SHA256}  $RUNNER_TEMP/$archive" | sha256sum --check -
+        tar -xzf "$RUNNER_TEMP/$archive" -C "$RUNNER_TEMP" gitleaks
+        "$RUNNER_TEMP/gitleaks" git . --log-opts=--all --redact --no-banner
+
+    - name: Smoke test scaffold and deploy flow
+      run: tests/smoke.sh
+
+    - name: Security regression tests
+      run: python3 -m unittest -v tests/test_security.py
